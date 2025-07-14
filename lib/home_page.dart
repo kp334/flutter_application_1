@@ -1,10 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'flow_logger_page.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import 'kualitas_air_page.dart';
+import 'data_logger_page.dart';
+import 'aduan_terproses.dart';
 import 'message_page.dart';
 import 'profile_page.dart';
-
+import 'login_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -52,7 +56,7 @@ class _HomePageState extends State<HomePage> {
     final String timeStr = DateFormat('HH:mm:ss').format(_now);
 
     return Scaffold(
-      drawer: const _SideDrawer(),
+      drawer: _SideDrawer(),
       appBar: AppBar(
         title: const Text('Monitoring - SCADA', style: TextStyle(fontSize: 16)),
         centerTitle: true,
@@ -76,7 +80,7 @@ class _HomePageState extends State<HomePage> {
                 Expanded(
                   child: _InfoCard(
                     color: Colors.blue,
-                    icon: Icons.speed,
+                    icon: Icons.people,
                     label: 'SR',
                     value: '60.213',
                   ),
@@ -84,13 +88,20 @@ class _HomePageState extends State<HomePage> {
               ]),
               SizedBox(height: vSpacing),
               Row(children: [
-                const Expanded(
-                  child: _InfoCard(
-                    color: Colors.amber,
-                    icon: Icons.report,
-                    label: 'Total Aduan',
-                    value: '12',
-                    textColor: Colors.black,
+                Expanded(
+                  child: InkWell(
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const AduanTerprosesPage()),
+                      );
+                    },
+                    child: const _InfoCard(
+                      color: Colors.amber,
+                      icon: Icons.report,
+                      label: 'Total Aduan',
+                      value: '12',
+                      textColor: Colors.black,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -108,13 +119,18 @@ class _HomePageState extends State<HomePage> {
               SizedBox(height: vSpacing),
               SizedBox(
                 height: 160,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _reservoirNames.length,
-                  itemBuilder: (_, index) => _LevelCard(
-                    title: _reservoirNames[index],
-                    width: levelCardWidth,
-                    value: (index + 1) / (_reservoirNames.length + 1),
+                child: Scrollbar(
+                  thickness: 6,
+                  radius: const Radius.circular(4),
+                  thumbVisibility: true,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _reservoirNames.length,
+                    itemBuilder: (_, index) => _LevelCard(
+                      title: _reservoirNames[index],
+                      width: levelCardWidth,
+                      value: (index + 1) / (_reservoirNames.length + 1),
+                    ),
                   ),
                 ),
               ),
@@ -122,7 +138,7 @@ class _HomePageState extends State<HomePage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Flow Logger', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text('Data Logger', style: TextStyle(fontWeight: FontWeight.bold)),
                   SizedBox(
                     width: 140,
                     height: 30,
@@ -144,7 +160,7 @@ class _HomePageState extends State<HomePage> {
                 child: OutlinedButton(
                   onPressed: () {
                     Navigator.of(context).push(
-                      MaterialPageRoute(builder: (context) => const FlowLoggerScreen()),
+                      MaterialPageRoute(builder: (context) => const DataLoggerScreen()),
                     );
                   },
                   child: const Text('Lihat Semua'),
@@ -155,38 +171,31 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
       bottomNavigationBar: BottomNavigationBar(
-  currentIndex: _navIndex,
-  onTap: (i) {
-    setState(() => _navIndex = i);
-    switch (i) {
-      case 0:
-        // Navigasi ke halaman pesan
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const MessagePage()),
-        );
-        break;
-      case 1:
-        // Halaman utama
-        break;
-      case 2:
-        // Navigasi ke halaman profil
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const ProfilePage()),
-        );
-        break;
-    }
-  },
-  items: const [
-    BottomNavigationBarItem(icon: Icon(Icons.mail), label: ''),
-    BottomNavigationBarItem(icon: Icon(Icons.home), label: ''),
-    BottomNavigationBarItem(icon: Icon(Icons.person), label: ''),
-  ],
-),
+        currentIndex: _navIndex,
+        onTap: (i) {
+          setState(() => _navIndex = i);
+          switch (i) {
+            case 0:
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const MessagePage()));
+              break;
+            case 1:
+              break;
+            case 2:
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfilePage()));
+              break;
+          }
+        },
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.mail), label: ''),
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: ''),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: ''),
+        ],
+      ),
     );
   }
 }
+
+// ====================== COMPONENTS ==========================
 
 class _InfoCard extends StatelessWidget {
   final Color color;
@@ -294,25 +303,51 @@ class _FlowLoggerCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade400),
+        color: const Color(0xFFF8F4FA),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
-          Row(
-            children: [
-              Icon(Icons.place, size: 14, color: Colors.blue),
-              SizedBox(width: 4),
-              Text('ZONA DUKUHSALAM', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+      child: Stack(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              Text('ZONA DUKUHSALAM',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: Colors.teal,
+                  )),
+              SizedBox(height: 8),
+              _FlowLoggerInfo(label: 'Flow', value: '2.57 L/s (<= Min: 3.5)', icon: Icons.water_drop),
+              _FlowLoggerInfo(label: 'Bar', value: '0.00', icon: Icons.speed),
+              _FlowLoggerInfo(label: 'Update Terakhir', value: '02/07/2025, 11:45', icon: Icons.access_time),
+              SizedBox(height: 24),
             ],
           ),
-          SizedBox(height: 6),
-          _FlowLoggerInfo(label: 'Flow', value: '2.57 L/s (< Min 3.5)'),
-          _FlowLoggerInfo(label: 'Bar', value: '0.00'),
-          _FlowLoggerInfo(label: 'Update Terakhir', value: '02/07/2025, 11:45'),
-          SizedBox(height: 4),
-          Chip(label: Text('Normal', style: TextStyle(fontSize: 10)), backgroundColor: Colors.greenAccent),
+          const Positioned(
+            right: 4,
+            top: 4,
+            child: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green, size: 16),
+                SizedBox(width: 4),
+                Text('Normal', style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.w500)),
+              ],
+            ),
+          ),
+          Positioned(
+            right: 4,
+            bottom: 4,
+            child: InkWell(
+              onTap: () async {
+                const url = 'https://www.google.com/maps/search/?api=1&query=-7.425728,109.006385';
+                if (await canLaunchUrl(Uri.parse(url))) {
+                  await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+                }
+              },
+              child: const Icon(Icons.place, size: 18),
+            ),
+          ),
         ],
       ),
     );
@@ -322,8 +357,9 @@ class _FlowLoggerCard extends StatelessWidget {
 class _FlowLoggerInfo extends StatelessWidget {
   final String label;
   final String value;
+  final IconData icon;
 
-  const _FlowLoggerInfo({required this.label, required this.value});
+  const _FlowLoggerInfo({required this.label, required this.value, required this.icon});
 
   @override
   Widget build(BuildContext context) {
@@ -331,7 +367,8 @@ class _FlowLoggerInfo extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 2),
       child: Row(
         children: [
-          const SizedBox(width: 14),
+          Icon(icon, size: 14, color: Colors.black54),
+          const SizedBox(width: 4),
           Text('$label : ', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
           Expanded(child: Text(value, style: const TextStyle(fontSize: 11))),
         ],
@@ -341,8 +378,6 @@ class _FlowLoggerInfo extends StatelessWidget {
 }
 
 class _SideDrawer extends StatelessWidget {
-  const _SideDrawer();
-
   @override
   Widget build(BuildContext context) {
     return Drawer(
@@ -370,17 +405,43 @@ class _SideDrawer extends StatelessWidget {
             leading: const Icon(Icons.water_drop),
             title: const Text('Flow Logger'),
             onTap: () {
+              Navigator.of(context).pop();
               Navigator.of(context).push(
-                MaterialPageRoute(builder: (context) => const FlowLoggerScreen()),
+                MaterialPageRoute(builder: (context) => const DataLoggerScreen()),
               );
             },
           ),
-          const ListTile(leading: Icon(Icons.science), title: Text('Kualitas Air')),
+          ListTile(
+            leading: const Icon(Icons.science),
+            title: const Text('Kualitas Air'),
+            onTap: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => const KualitasAirPage()),
+              );
+            },
+          ),
           const ListTile(leading: Icon(Icons.speed), title: Text('Pressure Logger')),
-          const ListTile(leading: Icon(Icons.water), title: Text('Level Air')),
-          const ListTile(leading: Icon(Icons.report), title: Text('Aduan Terproses')),
+          ListTile(
+            leading: const Icon(Icons.report),
+            title: const Text('Aduan Terproses'),
+            onTap: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => const AduanTerprosesPage()),
+              );
+            },
+          ),
           const Divider(),
-          const ListTile(leading: Icon(Icons.logout), title: Text('Logout')),
+          ListTile(
+            leading: const Icon(Icons.logout),
+            title: const Text('Logout'),
+            onTap: () {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (context) => const LoginPage()),
+              );
+            },
+          ),
         ],
       ),
     );

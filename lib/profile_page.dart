@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'message_page.dart'; 
-import 'home_page.dart';    
+import 'message_page.dart';
+import 'home_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -49,6 +49,18 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
 
             const SizedBox(height: 10),
+
+            // Tambahan: Judul Informasi Diri
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  "Informasi Diri",
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ),
+            ),
 
             // Informasi Diri Card
             Padding(
@@ -102,22 +114,50 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
+
+                    // Ganti Tombol Logout
+                    TextButton(
+                      style: TextButton.styleFrom(
                         backgroundColor: Colors.red,
                         foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                       onPressed: () {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text("Berhasil keluar dari akun")),
                         );
                       },
-                      child: const Text("Keluar dari akun"),
+                      child: const Text("Keluar dari akun", style: TextStyle(fontSize: 16)),
                     ),
                   ],
                 ),
               ),
             ),
+
+            const SizedBox(height: 30),
+
+            // Tambahan: Night Mode Toggle
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text("Night Mode", style: TextStyle(fontSize: 16)),
+                  Switch(
+                    value: false,
+                    onChanged: (bool value) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("Night Mode belum tersedia")),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+
             const SizedBox(height: 20),
           ],
         ),
