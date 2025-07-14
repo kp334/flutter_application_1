@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'message_page.dart';
 import 'home_page.dart';
+import 'theme_provider.dart'; // Tambahkan import ini
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -18,6 +20,9 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDarkMode = themeProvider.themeMode == ThemeMode.dark;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("Akun Saya"),
@@ -26,7 +31,7 @@ class _ProfilePageState extends State<ProfilePage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // Header SCADA & Foto Profil Kecil
+            // Header SCADA
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 10),
               child: Row(
@@ -50,7 +55,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
             const SizedBox(height: 10),
 
-            // Tambahan: Judul Informasi Diri
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 4),
               child: Align(
@@ -62,7 +66,7 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ),
 
-            // Informasi Diri Card
+            // Informasi Diri
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Container(
@@ -115,7 +119,6 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                     const SizedBox(height: 20),
 
-                    // Ganti Tombol Logout
                     TextButton(
                       style: TextButton.styleFrom(
                         backgroundColor: Colors.red,
@@ -139,7 +142,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
             const SizedBox(height: 30),
 
-            // Tambahan: Night Mode Toggle
+            // Night Mode Switch
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Row(
@@ -147,11 +150,9 @@ class _ProfilePageState extends State<ProfilePage> {
                 children: [
                   const Text("Night Mode", style: TextStyle(fontSize: 16)),
                   Switch(
-                    value: false,
-                    onChanged: (bool value) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("Night Mode belum tersedia")),
-                      );
+                    value: isDarkMode,
+                    onChanged: (value) {
+                      themeProvider.toggleTheme(value);
                     },
                   ),
                 ],
@@ -171,7 +172,7 @@ class _ProfilePageState extends State<ProfilePage> {
             Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MessagePage()));
           } else if (index == 1) {
             Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomePage()));
-          } // index 2 = ProfilePage
+          }
         },
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.mail), label: ''),
