@@ -64,6 +64,7 @@ class _DataLoggerScreenState extends State<DataLoggerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final totalPages = (filteredZones.length / _zonesPerPage).ceil();
     final start = _currentPage * _zonesPerPage;
     final end = start + _zonesPerPage;
@@ -73,9 +74,9 @@ class _DataLoggerScreenState extends State<DataLoggerScreen> {
     );
 
     return Scaffold(
-      backgroundColor: const Color(0xffe0f6f4),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xffd0f0ec),
+        backgroundColor: isDark ? Colors.grey[900] : const Color(0xffd0f0ec),
         title: const Text("Data Logger"),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -96,7 +97,7 @@ class _DataLoggerScreenState extends State<DataLoggerScreen> {
                 prefixIcon: const Icon(Icons.search),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 filled: true,
-                fillColor: Colors.white,
+                fillColor: Theme.of(context).inputDecorationTheme.fillColor ?? (isDark ? Colors.grey[800] : Colors.white),
               ),
             ),
           ),
@@ -174,10 +175,12 @@ class ZoneCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: const Color(0xfff6f2fa),
+      color: Theme.of(context).cardColor,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -186,7 +189,13 @@ class ZoneCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(zone.name, style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
+                Text(
+                  zone.name,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: Colors.teal,
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
                 Row(
                   children: [
                     Icon(zone.isNormal ? Icons.check_circle : Icons.error,
@@ -219,7 +228,7 @@ class ZoneCard extends StatelessWidget {
                 ),
                 IconButton(
                   icon: const Icon(Icons.location_pin),
-                  color: Colors.black87,
+                  color: isDark ? Colors.white70 : Colors.black87,
                   onPressed: () => _openMap(context),
                 )
               ],

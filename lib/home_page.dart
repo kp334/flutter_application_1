@@ -195,7 +195,7 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-// ====================== COMPONENTS ==========================
+// ===================== COMPONENTS =======================
 
 class _InfoCard extends StatelessWidget {
   final Color color;
@@ -300,28 +300,33 @@ class _FlowLoggerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = isDark ? Colors.grey[850] : const Color(0xFFF8F4FA);
+    final textColor = isDark ? Colors.white70 : Colors.black87;
+    final zoneColor = isDark ? Colors.tealAccent : Colors.teal;
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F4FA),
+        color: cardColor,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Stack(
         children: [
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
+            children: [
               Text('ZONA DUKUHSALAM',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
-                    color: Colors.teal,
+                    color: zoneColor,
                   )),
-              SizedBox(height: 8),
-              _FlowLoggerInfo(label: 'Flow', value: '2.57 L/s (<= Min: 3.5)', icon: Icons.water_drop),
-              _FlowLoggerInfo(label: 'Bar', value: '0.00', icon: Icons.speed),
-              _FlowLoggerInfo(label: 'Update Terakhir', value: '02/07/2025, 11:45', icon: Icons.access_time),
-              SizedBox(height: 24),
+              const SizedBox(height: 8),
+              _FlowLoggerInfo(label: 'Flow', value: '2.57 L/s (<= Min: 3.5)', icon: Icons.water_drop, textColor: textColor),
+              _FlowLoggerInfo(label: 'Bar', value: '0.00', icon: Icons.speed, textColor: textColor),
+              _FlowLoggerInfo(label: 'Update Terakhir', value: '02/07/2025, 11:45', icon: Icons.access_time, textColor: textColor),
+              const SizedBox(height: 24),
             ],
           ),
           const Positioned(
@@ -358,8 +363,14 @@ class _FlowLoggerInfo extends StatelessWidget {
   final String label;
   final String value;
   final IconData icon;
+  final Color textColor;
 
-  const _FlowLoggerInfo({required this.label, required this.value, required this.icon});
+  const _FlowLoggerInfo({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.textColor,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -367,10 +378,10 @@ class _FlowLoggerInfo extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 2),
       child: Row(
         children: [
-          Icon(icon, size: 14, color: Colors.black54),
+          Icon(icon, size: 14, color: textColor),
           const SizedBox(width: 4),
-          Text('$label : ', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
-          Expanded(child: Text(value, style: const TextStyle(fontSize: 11))),
+          Text('$label : ', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: textColor)),
+          Expanded(child: Text(value, style: TextStyle(fontSize: 11, color: textColor))),
         ],
       ),
     );

@@ -12,6 +12,26 @@ void main() {
   );
 }
 
+// ✅ Tambahan: Custom dark theme yang tidak terlalu gelap
+final ThemeData customDarkTheme = ThemeData(
+  brightness: Brightness.dark,
+  scaffoldBackgroundColor: const Color(0xFF2C2C3E),
+  primaryColor: Colors.teal.shade200,
+  cardColor: const Color(0xFF3A3A4F),
+  appBarTheme: const AppBarTheme(
+    backgroundColor: Color(0xFF3A3A4F),
+    iconTheme: IconThemeData(color: Colors.white),
+    titleTextStyle: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+  ),
+  textTheme: const TextTheme(
+    bodyMedium: TextStyle(color: Colors.white70),
+    bodySmall: TextStyle(color: Colors.white60),
+  ),
+  popupMenuTheme: const PopupMenuThemeData(color: Color(0xFF4A4A5F)),
+  dividerColor: Colors.white24,
+  useMaterial3: true,
+);
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -28,11 +48,7 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.teal,
         useMaterial3: true,
       ),
-      darkTheme: ThemeData(
-        brightness: Brightness.dark,
-        primarySwatch: Colors.teal,
-        useMaterial3: true,
-      ),
+      darkTheme: customDarkTheme, // 🔁 Pakai dark theme yang sudah disesuaikan
       home: const LoginPage(),
     );
   }
