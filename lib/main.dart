@@ -12,7 +12,7 @@ void main() {
   );
 }
 
-// ✅ Tambahan: Custom dark theme yang tidak terlalu gelap
+
 final ThemeData customDarkTheme = ThemeData(
   brightness: Brightness.dark,
   scaffoldBackgroundColor: const Color(0xFF2C2C3E),
@@ -48,7 +48,7 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.teal,
         useMaterial3: true,
       ),
-      darkTheme: customDarkTheme, // 🔁 Pakai dark theme yang sudah disesuaikan
+      darkTheme: customDarkTheme, // 
       home: const LoginPage(),
     );
   }

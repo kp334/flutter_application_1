@@ -27,7 +27,7 @@ class AduanTerprosesPage extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          "Aduan Ter Proses",
+          "Aduan Pelanggan",
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
         ),
         centerTitle: true,
@@ -38,7 +38,7 @@ class AduanTerprosesPage extends StatelessWidget {
         child: Column(
           children: [
             const Text(
-              'Aduan Terproses Cabang (3 Bulan Berjalan)',
+              'Aduan Pelanggan Cabang (3 Bulan Berjalan)',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               textAlign: TextAlign.center,
             ),

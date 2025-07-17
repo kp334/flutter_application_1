@@ -3,12 +3,16 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+
+import 'grafik_level_air_page.dart';
+import 'zona_page.dart';
 import 'kualitas_air_page.dart';
 import 'data_logger_page.dart';
 import 'aduan_terproses.dart';
 import 'message_page.dart';
 import 'profile_page.dart';
 import 'login_page.dart';
+
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -67,16 +71,23 @@ class _HomePageState extends State<HomePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(children: const [
+              Row(children: [
                 Expanded(
-                  child: _InfoCard(
-                    color: Colors.blue,
-                    icon: Icons.location_on,
-                    label: 'Zona',
-                    value: '20',
+                  child: InkWell(
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const ZonaPage()),
+                      );
+                    },
+                    child: const _InfoCard(
+                      color: Colors.blue,
+                      icon: Icons.location_on,
+                      label: 'Zona',
+                      value: '20',
+                    ),
                   ),
                 ),
-                SizedBox(width: 8),
+                const SizedBox(width: 8),
                 Expanded(
                   child: _InfoCard(
                     color: Colors.blue,
@@ -130,6 +141,8 @@ class _HomePageState extends State<HomePage> {
                       title: _reservoirNames[index],
                       width: levelCardWidth,
                       value: (index + 1) / (_reservoirNames.length + 1),
+                      onTap: () {
+                      },
                     ),
                   ),
                 ),
@@ -192,10 +205,7 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
     );
-  }
-}
-
-// ===================== COMPONENTS =======================
+  }}
 
 class _InfoCard extends StatelessWidget {
   final Color color;
@@ -236,42 +246,47 @@ class _LevelCard extends StatelessWidget {
   final String title;
   final double width;
   final double value;
+  final VoidCallback? onTap;
 
   const _LevelCard({
     required this.title,
     required this.width,
     required this.value,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: width,
-      margin: const EdgeInsets.only(right: 8),
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade300),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Column(
-        children: [
-          Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11)),
-          const SizedBox(height: 4),
-          Expanded(child: Center(child: _VerticalGauge(value: value))),
-          const SizedBox(height: 4),
-          const Text('No. Indicator', style: TextStyle(fontSize: 10)),
-          const SizedBox(height: 2),
-          Container(
-            height: 18,
-            width: double.infinity,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.grey.shade200,
-              borderRadius: BorderRadius.circular(4),
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        width: width,
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Column(
+          children: [
+            Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11)),
+            const SizedBox(height: 4),
+            Expanded(child: Center(child: _VerticalGauge(value: value))),
+            const SizedBox(height: 4),
+            const Text('No. Indicator', style: TextStyle(fontSize: 10)),
+            const SizedBox(height: 2),
+            Container(
+              height: 18,
+              width: double.infinity,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text('Timestamp', style: TextStyle(fontSize: 9)),
             ),
-            child: const Text('Timestamp', style: TextStyle(fontSize: 9)),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
