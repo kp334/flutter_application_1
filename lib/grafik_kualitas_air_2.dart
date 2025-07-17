@@ -1,6 +1,10 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:csv/csv.dart';
 
 class GrafikKualitasAir2 extends StatefulWidget {
   const GrafikKualitasAir2({super.key});
@@ -12,7 +16,6 @@ class GrafikKualitasAir2 extends StatefulWidget {
 class _GrafikKualitasAir2State extends State<GrafikKualitasAir2> {
   final startDateController = TextEditingController(text: '24-05-2025 13:34');
   final endDateController = TextEditingController(text: '10-07-2025 03:29');
-
   final DateFormat dateFormat = DateFormat("dd-MM-yyyy HH:mm");
 
   final List<Map<String, dynamic>> allData = [
@@ -26,7 +29,7 @@ class _GrafikKualitasAir2State extends State<GrafikKualitasAir2> {
   @override
   void initState() {
     super.initState();
-    filterData(); // Inisialisasi awal
+    filterData();
   }
 
   void filterData() {
@@ -35,9 +38,10 @@ class _GrafikKualitasAir2State extends State<GrafikKualitasAir2> {
 
     setState(() {
       filteredData = allData.where((data) {
-        DateTime dataTime = DateFormat("yyyy-MM-dd HH:mm").parse(data['datetime']);
+        DateTime dataTime =
+            DateFormat("yyyy-MM-dd HH:mm").parse(data['datetime']);
         return dataTime.isAfter(startDate.subtract(const Duration(seconds: 1))) &&
-               dataTime.isBefore(endDate.add(const Duration(seconds: 1)));
+            dataTime.isBefore(endDate.add(const Duration(seconds: 1)));
       }).toList();
     });
   }
@@ -65,9 +69,54 @@ class _GrafikKualitasAir2State extends State<GrafikKualitasAir2> {
           time.minute,
         );
         controller.text = dateFormat.format(combined);
-        filterData(); // Update grafik dan tabel setelah pilih waktu
       }
     }
+  }
+
+  Future<void> handleExportOption(String value) async {
+    switch (value) {
+      case 'print':
+        showDialog(
+          context: context,
+          builder: (_) =>
+              const AlertDialog(content: Text("Fitur Print belum tersedia.")),
+        );
+        break;
+      case 'pdf':
+        showDialog(
+          context: context,
+          builder: (_) =>
+              const AlertDialog(content: Text("Export PDF belum tersedia.")),
+        );
+        break;
+      case 'image':
+        showDialog(
+          context: context,
+          builder: (_) =>
+              const AlertDialog(content: Text("Download PNG, JPEG belum tersedia.")),
+        );
+        break;
+      case 'csv':
+        await exportCSV();
+        break;
+    }
+  }
+
+  Future<void> exportCSV() async {
+    List<List<dynamic>> rows = [
+      ['DateTime', 'pH Air', 'Sisa Klor'],
+      ...filteredData.map((row) => [
+            row['datetime'],
+            row['ph'],
+            row['klor'],
+          ])
+    ];
+
+    String csvData = const ListToCsvConverter().convert(rows);
+    final directory = await getTemporaryDirectory();
+    final path = '${directory.path}/data_export.csv';
+    final file = File(path)..writeAsStringSync(csvData);
+    await Share.shareXFiles([XFile(file.path)], text: 'Exported Data CSV');
   }
 
   @override
@@ -86,10 +135,16 @@ class _GrafikKualitasAir2State extends State<GrafikKualitasAir2> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
-        actions: const [
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Icon(Icons.menu),
+        actions: [
+          PopupMenuButton<String>(
+            onSelected: (value) => handleExportOption(value),
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: 'print', child: Text('Print Chart')),
+              const PopupMenuItem(value: 'pdf', child: Text('Download PDF')),
+              const PopupMenuItem(value: 'image', child: Text('Download PNG, JPEG')),
+              const PopupMenuItem(value: 'csv', child: Text('Download CSV, XLS')),
+            ],
+            icon: const Icon(Icons.menu),
           )
         ],
       ),
@@ -103,7 +158,7 @@ class _GrafikKualitasAir2State extends State<GrafikKualitasAir2> {
             ),
             SizedBox(height: screenHeight * 0.02),
 
-            // Grafik Line Chart
+            // Chart
             SizedBox(
               height: screenHeight * 0.25,
               width: double.infinity,
@@ -169,7 +224,7 @@ class _GrafikKualitasAir2State extends State<GrafikKualitasAir2> {
 
             const SizedBox(height: 16),
 
-            // Filter Tanggal + Waktu
+            // Filter Date
             Column(
               children: [
                 Row(
@@ -218,21 +273,20 @@ class _GrafikKualitasAir2State extends State<GrafikKualitasAir2> {
             ),
 
             const SizedBox(height: 24),
-
             const Text(
               "DATA CHLORINE ANALYZER\nBEDUG",
               textAlign: TextAlign.center,
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
-
             const SizedBox(height: 12),
 
-            // Tabel Data
+            // Table
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTableTheme(
                 data: DataTableThemeData(
-                  headingRowColor: MaterialStateProperty.all(Colors.blue.shade50),
+                  headingRowColor:
+                      MaterialStateProperty.all(Colors.blue.shade50),
                   dataRowColor: MaterialStateProperty.all(Colors.white),
                   dividerThickness: 1.2,
                 ),
@@ -266,8 +320,6 @@ class _GrafikKualitasAir2State extends State<GrafikKualitasAir2> {
           ],
         ),
       ),
-
-      // Bottom Navigation
       bottomNavigationBar: BottomNavigationBar(
         backgroundColor: Colors.lightBlue[100],
         selectedItemColor: Colors.blue,
