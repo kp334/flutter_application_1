@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http;
 
 import 'grafik_level_air_page.dart';
 import 'zona_page.dart';
@@ -24,14 +26,30 @@ class _HomePageState extends State<HomePage> {
   late Timer _timer;
   DateTime _now = DateTime.now();
 
-  final List<String> _reservoirNames = [
-    'Reservoir Bag. Wangon',
-    'Reservoir Pacul',
-    'Reservoir Cilongok',
-    'Reservoir Ajibarang',
-    'Reservoir Kalibagor',
-    'Reservoir Rawalo',
-  ];
+  List<Map<String, dynamic>> _levelAirData = [];
+  bool _isLoadingLevelAir = true;
+
+  Future<void> _fetchLevelAirData() async {
+    try {
+      final response = await http.get(Uri.parse('https://dev.tirtaayu.my.id/api/tekniks/device/LEVEL'));
+      if (response.statusCode == 200) {
+        final List<dynamic> jsonData = json.decode(response.body);
+        setState(() {
+          _levelAirData = jsonData.map((e) => {
+                'nama_reservoir': e['nama_reservoir'],
+                'value': (e['value'] as num).toDouble(),
+                'timestamp': e['timestamp'] ?? '',
+              }).toList();
+          _isLoadingLevelAir = false;
+        });
+      } else {
+        throw Exception('Gagal memuat data level air');
+      }
+    } catch (e) {
+      print('Error: $e');
+      setState(() => _isLoadingLevelAir = false);
+    }
+  }
 
   @override
   void initState() {
@@ -39,6 +57,7 @@ class _HomePageState extends State<HomePage> {
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       setState(() => _now = DateTime.now());
     });
+    _fetchLevelAirData();
   }
 
   @override
@@ -49,13 +68,13 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final Size size = MediaQuery.of(context).size;
-    final bool isCompact = size.width <= 412;
-    final double vSpacing = isCompact ? 8 : 12;
-    final double levelCardWidth = isCompact ? 100 : 120;
+    final size = MediaQuery.of(context).size;
+    final isCompact = size.width <= 412;
+    final vSpacing = isCompact ? 8.0 : 12.0;
+    final levelCardWidth = isCompact ? 100.0 : 120.0;
 
-    final String dateStr = DateFormat('d/M/yyyy').format(_now);
-    final String timeStr = DateFormat('HH:mm:ss').format(_now);
+    final dateStr = DateFormat('d/M/yyyy').format(_now);
+    final timeStr = DateFormat('HH:mm:ss').format(_now);
 
     return Scaffold(
       drawer: _SideDrawer(),
@@ -73,9 +92,7 @@ class _HomePageState extends State<HomePage> {
                 Expanded(
                   child: InkWell(
                     onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const ZonaPage()),
-                      );
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const ZonaPage()));
                     },
                     child: const _InfoCard(
                       color: Colors.blue,
@@ -100,9 +117,7 @@ class _HomePageState extends State<HomePage> {
                 Expanded(
                   child: InkWell(
                     onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const AduanTerprosesPage()),
-                      );
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const AduanTerprosesPage()));
                     },
                     child: const _InfoCard(
                       color: Colors.amber,
@@ -128,28 +143,29 @@ class _HomePageState extends State<HomePage> {
               SizedBox(height: vSpacing),
               SizedBox(
                 height: 160,
-                child: Scrollbar(
-                  thickness: 6,
-                  radius: const Radius.circular(4),
-                  thumbVisibility: true,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _reservoirNames.length,
-                    itemBuilder: (_, index) => _LevelCard(
-                      title: _reservoirNames[index],
-                      width: levelCardWidth,
-                      value: (index + 1) / (_reservoirNames.length + 1),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => GrafikLevelAir(zoneName: _reservoirNames[index]),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
+                child: _isLoadingLevelAir
+                    ? const Center(child: CircularProgressIndicator())
+                    : ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _levelAirData.length,
+                        itemBuilder: (_, index) {
+                          final data = _levelAirData[index];
+                          return _LevelCard(
+                            title: data['nama_reservoir'],
+                            width: levelCardWidth,
+                            value: data['value'],
+                            timestamp: data['timestamp'],
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => GrafikLevelAir(zoneName: data['nama_reservoir']),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
               ),
               SizedBox(height: vSpacing * 2),
               Row(
@@ -176,9 +192,7 @@ class _HomePageState extends State<HomePage> {
                 alignment: Alignment.centerRight,
                 child: OutlinedButton(
                   onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (context) => const DataLoggerScreen()),
-                    );
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const DataLoggerScreen()));
                   },
                   child: const Text('Lihat Semua'),
                 ),
@@ -193,12 +207,10 @@ class _HomePageState extends State<HomePage> {
           setState(() => _navIndex = i);
           switch (i) {
             case 0:
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const MessagePage()));
-              break;
-            case 1:
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const MessagePage()));
               break;
             case 2:
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfilePage()));
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilePage()));
               break;
           }
         },
@@ -251,12 +263,14 @@ class _LevelCard extends StatelessWidget {
   final String title;
   final double width;
   final double value;
+  final String timestamp;
   final VoidCallback? onTap;
 
   const _LevelCard({
     required this.title,
     required this.width,
     required this.value,
+    required this.timestamp,
     this.onTap,
   });
 
@@ -278,7 +292,7 @@ class _LevelCard extends StatelessWidget {
             const SizedBox(height: 4),
             Expanded(child: Center(child: _VerticalGauge(value: value))),
             const SizedBox(height: 4),
-            const Text('No. Indicator', style: TextStyle(fontSize: 10)),
+            const Text('Level Air', style: TextStyle(fontSize: 10)),
             const SizedBox(height: 2),
             Container(
               height: 18,
@@ -288,7 +302,7 @@ class _LevelCard extends StatelessWidget {
                 color: Colors.grey.shade200,
                 borderRadius: BorderRadius.circular(4),
               ),
-              child: const Text('Timestamp', style: TextStyle(fontSize: 9)),
+              child: Text(timestamp, style: const TextStyle(fontSize: 9)),
             ),
           ],
         ),
@@ -337,15 +351,26 @@ class _FlowLoggerCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('ZONA DUKUHSALAM',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: zoneColor,
-                  )),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: zoneColor)),
               const SizedBox(height: 8),
-              _FlowLoggerInfo(label: 'Flow', value: '2.57 L/s (<= Min: 3.5)', icon: Icons.water_drop, textColor: textColor),
-              _FlowLoggerInfo(label: 'Bar', value: '0.00', icon: Icons.speed, textColor: textColor),
-              _FlowLoggerInfo(label: 'Update Terakhir', value: '02/07/2025, 11:45', icon: Icons.access_time, textColor: textColor),
+              _FlowLoggerInfo(
+                label: 'Flow',
+                value: '2.57 L/s (<= Min: 3.5)',
+                icon: Icons.water_drop,
+                textColor: textColor,
+              ),
+              _FlowLoggerInfo(
+                label: 'Bar',
+                value: '0.00',
+                icon: Icons.speed,
+                textColor: textColor,
+              ),
+              _FlowLoggerInfo(
+                label: 'Update Terakhir',
+                value: '02/07/2025, 11:45',
+                icon: Icons.access_time,
+                textColor: textColor,
+              ),
               const SizedBox(height: 24),
             ],
           ),
@@ -436,20 +461,16 @@ class _SideDrawer extends StatelessWidget {
             leading: const Icon(Icons.water_drop),
             title: const Text('Flow Logger'),
             onTap: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (context) => const DataLoggerScreen()),
-              );
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const DataLoggerScreen()));
             },
           ),
           ListTile(
             leading: const Icon(Icons.science),
             title: const Text('Kualitas Air'),
             onTap: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (context) => const KualitasAirPage()),
-              );
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const KualitasAirPage()));
             },
           ),
           const ListTile(leading: Icon(Icons.speed), title: Text('Pressure Logger')),
@@ -457,10 +478,8 @@ class _SideDrawer extends StatelessWidget {
             leading: const Icon(Icons.report),
             title: const Text('Aduan Terproses'),
             onTap: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (context) => const AduanTerprosesPage()),
-              );
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const AduanTerprosesPage()));
             },
           ),
           const Divider(),
@@ -468,9 +487,7 @@ class _SideDrawer extends StatelessWidget {
             leading: const Icon(Icons.logout),
             title: const Text('Logout'),
             onTap: () {
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (context) => const LoginPage()),
-              );
+              Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginPage()));
             },
           ),
         ],
