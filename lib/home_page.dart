@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-
 import 'grafik_level_air_page.dart';
 import 'zona_page.dart';
 import 'kualitas_air_page.dart';
@@ -12,7 +11,6 @@ import 'aduan_terproses.dart';
 import 'message_page.dart';
 import 'profile_page.dart';
 import 'login_page.dart';
-
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -142,6 +140,12 @@ class _HomePageState extends State<HomePage> {
                       width: levelCardWidth,
                       value: (index + 1) / (_reservoirNames.length + 1),
                       onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => GrafikLevelAir(zoneName: _reservoirNames[index]),
+                          ),
+                        );
                       },
                     ),
                   ),
@@ -205,7 +209,8 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
     );
-  }}
+  }
+}
 
 class _InfoCard extends StatelessWidget {
   final Color color;

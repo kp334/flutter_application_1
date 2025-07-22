@@ -1,9 +1,11 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'register_page.dart';
 import 'forgot_password_page.dart';
-import 'home_page.dart'; 
-
-
+import 'home_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -16,6 +18,64 @@ class _LoginPageState extends State<LoginPage> {
   final usernameController = TextEditingController();
   final passwordController = TextEditingController();
   bool isPasswordVisible = false;
+
+  Future<void> loginUser() async {
+    final username = usernameController.text;
+    final password = passwordController.text;
+
+    final url = Uri.parse('https://dev.tirtaayu.my.id/api/login');
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: {
+          'username': username,
+          'password': password,
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+
+        if (responseData['status'] == 'success') {
+          final token = responseData['data']['token'];
+
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('token', token);
+
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const HomePage()),
+          );
+        } else {
+          showError('Login gagal: ${responseData['message']}');
+        }
+      } else {
+        showError('Salah memasukan Username dan Password. Status code: ${response.statusCode}');
+      }
+    } catch (e) {
+      showError('Error: $e');
+    }
+  }
+
+  void showError(String message) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Login Gagal'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +99,6 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 child: Column(
                   children: [
-                    // Header
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
@@ -52,17 +111,12 @@ class _LoginPageState extends State<LoginPage> {
                         style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
                       ),
                     ),
-
                     const SizedBox(height: 20),
-
-                    // Logo
                     Image.asset(
                       'assets/images/logo_tirta_ayu.png',
                       height: screenHeight * 0.2,
                     ),
-
                     const SizedBox(height: 10),
-
                     _buildTextField("Username", usernameController),
                     _buildTextField(
                       "Password",
@@ -75,18 +129,9 @@ class _LoginPageState extends State<LoginPage> {
                         });
                       },
                     ),
-
                     const SizedBox(height: 12),
-
-                    // Tombol Masuk
                     ElevatedButton(
-                      onPressed: () {
-                        // Navigasi ke HomePage saat login berhasil
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(builder: (_) => const HomePage()),
-                        );
-                      },
+                      onPressed: () => loginUser(),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFEDE0FF),
                         padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 16),
@@ -99,10 +144,7 @@ class _LoginPageState extends State<LoginPage> {
                         style: TextStyle(color: Colors.black),
                       ),
                     ),
-
                     const SizedBox(height: 8),
-
-                    // Lupa Kata Sandi
                     TextButton(
                       onPressed: () {
                         Navigator.push(
@@ -115,8 +157,6 @@ class _LoginPageState extends State<LoginPage> {
                         style: TextStyle(color: Colors.blue),
                       ),
                     ),
-
-                    // Daftar Sekarang
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
