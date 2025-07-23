@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'data_grafik_page.dart';
 
@@ -17,6 +19,11 @@ class _DataLoggerScreenState extends State<DataLoggerScreen> {
   int _currentPage = 0;
   final int _zonesPerPage = 5;
 
+  final String apiUrl = 'https://dev.tirtaayu.my.id/api/tekniks/device/';
+  final String apiLogger = 'https://dev.tirtaayu.my.id/api/tekniks/logger/';
+  final String bearerToken =
+      'Bearer 8|3acT1iWYizq86jljp8FGUmQwLHF6fGSqFQ1gXa3T94fd5111';
+
   @override
   void initState() {
     super.initState();
@@ -24,36 +31,71 @@ class _DataLoggerScreenState extends State<DataLoggerScreen> {
     _searchController.addListener(_onSearchChanged);
   }
 
-  void _loadZones() {
-    final loadedZones = [
-      ZoneData("ZONA DUKUHSALAM", "2.57", 3.5, 0.0, "02/07/2025, 11:45", true, -7.4212, 109.2345),
-      ZoneData("DMA KAMPUNG MOCI", "5.21", 5.5, 0.0, "03/07/2025, 07:13", true, -7.4500, 109.2500),
-      ZoneData("DMA MARGASARI", "2.37", 3.0, 0.0, "03/07/2025, 07:05", true, -7.4600, 109.2700),
-      ZoneData("ZONA PDAB UJUNGRUSI BARAT", "598.98", 50.0, 0.0, "02/07/2025, 12:00", true, -7.4700, 109.2800),
-      ZoneData("ZONA BALAPULANG", "13.00", 13.0, 9.36, "02/07/2025, 07:18", false, -7.4800, 109.2900),
-      ZoneData("ZONA DUKUHRWRINGIN II", "0.17", 1.5, 0.0, "03/07/2025, 07:15", false, -7.4900, 109.3000),
-    ];
+  Future<void> _loadZones() async {
+    try {
+      final responseZona = await http.get(
+        Uri.parse(apiUrl),
+        headers: {'Authorization': bearerToken},
+      );
 
-    setState(() {
-      zones = loadedZones;
-      filteredZones = loadedZones;
-      _currentPage = 0;
-    });
+      final responseLogger = await http.get(
+        Uri.parse(apiLogger),
+        headers: {'Authorization': bearerToken},
+      );
+
+      if (responseZona.statusCode == 200 && responseLogger.statusCode == 200) {
+        final List<dynamic> zonaList = jsonDecode(responseZona.body)['data'];
+        final List<dynamic> loggerList = jsonDecode(responseLogger.body)['data'];
+
+        List<Zona> loadedZona =
+            zonaList.map((item) => Zona.fromJson(item)).toList();
+        List<LoggerData> loadedLogger =
+            loggerList.map((item) => LoggerData.fromJson(item)).toList();
+
+        final Map<String, LoggerData> loggerMap = {
+          for (var logger in loadedLogger) logger.serial: logger
+        };
+
+        List<ZoneData> combined = loadedZona.map((zona) {
+          final logger = loggerMap[zona.serial];
+          return ZoneData(
+            name: zona.nama,
+            latitude: zona.lat,
+            longitude: zona.long,
+            flow: logger?.flow ?? 0.0,
+            bar: logger?.bar ?? 0.0,
+            min: logger?.min ?? 0.0,
+            lastUpdate: logger?.updatedAt ?? '-',
+            isNormal: (logger?.flow ?? 0) > (logger?.min ?? 0),
+          );
+        }).toList();
+
+        setState(() {
+          zones = combined;
+          filteredZones = combined;
+          _currentPage = 0;
+        });
+      } else {
+        throw Exception(
+            'Failed to fetch data: ${responseZona.statusCode} / ${responseLogger.statusCode}');
+      }
+    } catch (e) {
+      print("Error: $e");
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Gagal memuat data dari API")),
+        );
+      }
+    }
   }
 
   void _onSearchChanged() {
     final query = _searchController.text.toLowerCase();
     setState(() {
-      filteredZones = zones.where((zone) => zone.name.toLowerCase().contains(query)).toList();
+      filteredZones =
+          zones.where((zone) => zone.name.toLowerCase().contains(query)).toList();
       _currentPage = 0;
     });
-  }
-
-  void _refreshZones() {
-    _loadZones();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Data berhasil diperbarui")),
-    );
   }
 
   @override
@@ -83,7 +125,7 @@ class _DataLoggerScreenState extends State<DataLoggerScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          IconButton(onPressed: _refreshZones, icon: const Icon(Icons.refresh)),
+          IconButton(onPressed: _loadZones, icon: const Icon(Icons.refresh)),
         ],
       ),
       body: Column(
@@ -97,7 +139,8 @@ class _DataLoggerScreenState extends State<DataLoggerScreen> {
                 prefixIcon: const Icon(Icons.search),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 filled: true,
-                fillColor: Theme.of(context).inputDecorationTheme.fillColor ?? (isDark ? Colors.grey[800] : Colors.white),
+                fillColor: Theme.of(context).inputDecorationTheme.fillColor ??
+                    (isDark ? Colors.grey[800] : Colors.white),
               ),
             ),
           ),
@@ -131,8 +174,10 @@ class _DataLoggerScreenState extends State<DataLoggerScreen> {
                     child: ElevatedButton(
                       onPressed: () => setState(() => _currentPage = i),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: _currentPage == i ? Colors.teal : Colors.grey[300],
-                        foregroundColor: _currentPage == i ? Colors.white : Colors.black,
+                        backgroundColor:
+                            _currentPage == i ? Colors.teal : Colors.grey[300],
+                        foregroundColor:
+                            _currentPage == i ? Colors.white : Colors.black,
                         minimumSize: const Size(36, 36),
                         padding: EdgeInsets.zero,
                       ),
@@ -162,7 +207,8 @@ class ZoneCard extends StatelessWidget {
   const ZoneCard({required this.zone, super.key});
 
   void _openMap(BuildContext context) async {
-    final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=${zone.latitude},${zone.longitude}');
+    final url = Uri.parse(
+        'https://www.google.com/maps/search/?api=1&query=${zone.latitude},${zone.longitude}');
     if (await canLaunchUrl(url)) {
       await launchUrl(url);
     } else {
@@ -214,7 +260,7 @@ class ZoneCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text("💧 Flow : ${zone.flow} L/s (<= Min: ${zone.min})"),
-            Text("🛁 Bar : ${zone.bar.toStringAsFixed(2)}"),
+            Text("📱 Bar : ${zone.bar.toStringAsFixed(2)}"),
             const SizedBox(height: 4),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -240,24 +286,79 @@ class ZoneCard extends StatelessWidget {
   }
 }
 
+class LoggerData {
+  final String serial;
+  final double flow;
+  final double bar;
+  final double min;
+  final String updatedAt;
+
+  LoggerData({
+    required this.serial,
+    required this.flow,
+    required this.bar,
+    required this.min,
+    required this.updatedAt,
+  });
+
+  factory LoggerData.fromJson(Map<String, dynamic> json) {
+    return LoggerData(
+      serial: json['serial'],
+      flow: (json['flow'] as num?)?.toDouble() ?? 0.0,
+      bar: (json['pressure'] as num?)?.toDouble() ?? 0.0,
+      min: (json['totalizer'] as num?)?.toDouble() ?? 0.0,
+      updatedAt: json['updated_at'] ?? '-',
+    );
+  }
+}
+
+class Zona {
+  final String tipe;
+  final int deviceId;
+  final String serial;
+  final String nama;
+  final double lat;
+  final double long;
+
+  Zona({
+    required this.tipe,
+    required this.deviceId,
+    required this.serial,
+    required this.nama,
+    required this.lat,
+    required this.long,
+  });
+
+  factory Zona.fromJson(Map<String, dynamic> json) {
+    return Zona(
+      tipe: json['tipe'],
+      deviceId: json['device_id'],
+      serial: json['serial'],
+      nama: json['nama'],
+      lat: (json['lat'] as num).toDouble(),
+      long: (json['long'] as num).toDouble(),
+    );
+  }
+}
+
 class ZoneData {
   final String name;
-  final String flow;
-  final double min;
-  final double bar;
-  final String lastUpdate;
-  final bool isNormal;
   final double latitude;
   final double longitude;
+  final double flow;
+  final double bar;
+  final double min;
+  final String lastUpdate;
+  final bool isNormal;
 
-  ZoneData(
-    this.name,
-    this.flow,
-    this.min,
-    this.bar,
-    this.lastUpdate,
-    this.isNormal,
-    this.latitude,
-    this.longitude,
-  );
+  ZoneData({
+    required this.name,
+    required this.latitude,
+    required this.longitude,
+    required this.flow,
+    required this.bar,
+    required this.min,
+    required this.lastUpdate,
+    required this.isNormal,
+  });
 }

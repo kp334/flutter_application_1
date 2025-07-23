@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
+
+import 'pressure_logger_page.dart';
 import 'grafik_level_air_page.dart';
 import 'zona_page.dart';
 import 'kualitas_air_page.dart';
@@ -29,27 +32,61 @@ class _HomePageState extends State<HomePage> {
   List<Map<String, dynamic>> _levelAirData = [];
   bool _isLoadingLevelAir = true;
 
-  Future<void> _fetchLevelAirData() async {
-    try {
-      final response = await http.get(Uri.parse('https://dev.tirtaayu.my.id/api/tekniks/device/LEVEL'));
-      if (response.statusCode == 200) {
-        final List<dynamic> jsonData = json.decode(response.body);
+Future<void> _fetchLevelAirData() async {
+  setState(() => _isLoadingLevelAir = true);
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token');
+
+    if (token == null) {
+      throw Exception('Token tidak ditemukan. Silakan login ulang.');
+    }
+
+    final response = await http.get(
+      Uri.parse('https://dev.tirtaayu.my.id/api/tekniks/device/LEVEL'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      },
+    );
+
+    print('Status Code: ${response.statusCode}');
+    print('Raw Response: ${response.body}');
+
+    if (response.statusCode == 200) {
+      final decoded = json.decode(response.body);
+
+      if (decoded is Map && decoded.containsKey('data')) {
+        final List<dynamic> dataList = decoded['data'];
+
         setState(() {
-          _levelAirData = jsonData.map((e) => {
-                'nama_reservoir': e['nama_reservoir'],
-                'value': (e['value'] as num).toDouble(),
-                'timestamp': e['timestamp'] ?? '',
-              }).toList();
+          _levelAirData = dataList.map((e) {
+  final level = e['level'] ?? {};
+  return {
+    'nama_reservoir': e['nama'] ?? 'Unknown',
+    'value': double.tryParse(level['nilai']?.toString() ?? '0') ?? 0.0,
+    'min': double.tryParse(level['min']?.toString() ?? '0') ?? 0.0,
+    'max': double.tryParse(level['max']?.toString() ?? '100') ?? 100.0,
+    'unit': level['satuan'] ?? '',
+    'timestamp': e['tanggal'] ?? '-',
+  };
+}).toList();
+
           _isLoadingLevelAir = false;
         });
       } else {
-        throw Exception('Gagal memuat data level air');
+        throw Exception('Format data tidak sesuai');
       }
-    } catch (e) {
-      print('Error: $e');
-      setState(() => _isLoadingLevelAir = false);
+    } else if (response.statusCode == 401) {
+      throw Exception('Token tidak valid atau telah kedaluwarsa. Silakan login ulang.');
+    } else {
+      throw Exception('Gagal memuat data level air: ${response.statusCode}');
     }
+  } catch (e) {
+    print('Fetch error: $e');
+    setState(() => _isLoadingLevelAir = false);
   }
+}
 
   @override
   void initState() {
@@ -138,8 +175,17 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
               ]),
-              SizedBox(height: vSpacing * 2),
-              const Text('Level Air', style: TextStyle(fontWeight: FontWeight.bold)),
+              Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Level Air', style: TextStyle(fontWeight: FontWeight.bold)),
+                    IconButton(
+                      icon: const Icon(Icons.refresh),
+                      onPressed: _fetchLevelAirData,
+                    ),
+                  ],
+                ),
+
               SizedBox(height: vSpacing),
               SizedBox(
                 height: 160,
@@ -312,18 +358,36 @@ class _LevelCard extends StatelessWidget {
 }
 
 class _VerticalGauge extends StatelessWidget {
-  final double value;
+  final double value; // 0.0 - 1.0
+
   const _VerticalGauge({required this.value});
 
   @override
   Widget build(BuildContext context) {
-    return RotatedBox(
-      quarterTurns: -1,
-      child: LinearProgressIndicator(
-        value: value,
-        minHeight: 14,
-        backgroundColor: Colors.grey.shade300,
-        valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).primaryColor),
+    final double totalHeight = 80.0;
+    final double fillHeight = totalHeight * value.clamp(0.0, 1.0);
+
+    return Container(
+      width: 20,
+      height: totalHeight,
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey),
+        borderRadius: BorderRadius.circular(6),
+        color: Colors.white,
+      ),
+      child: Stack(
+        alignment: Alignment.bottomCenter,
+        children: [
+          Container(
+            height: fillHeight,
+            decoration: BoxDecoration(
+              color: Colors.blueAccent,
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(6),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -473,15 +537,18 @@ class _SideDrawer extends StatelessWidget {
               Navigator.push(context, MaterialPageRoute(builder: (_) => const KualitasAirPage()));
             },
           ),
-          const ListTile(leading: Icon(Icons.speed), title: Text('Pressure Logger')),
           ListTile(
-            leading: const Icon(Icons.report),
-            title: const Text('Aduan Terproses'),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const AduanTerprosesPage()));
-            },
-          ),
+  leading: const Icon(Icons.speed),
+  title: const Text('Pressure Logger'),
+  onTap: () {
+    Navigator.pop(context); // Menutup drawer
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const PressureLoggerPage()),
+    );
+  },
+),
+
           const Divider(),
           ListTile(
             leading: const Icon(Icons.logout),

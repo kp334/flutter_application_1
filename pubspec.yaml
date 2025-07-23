@@ -50,7 +50,7 @@ dependencies:
   share_plus: ^7.2.1
   shared_preferences: ^2.2.0
   permission_handler: ^11.3.0
-  
+  font_awesome_flutter: ^10.7.0
   csv: ^5.0.2
 
 
