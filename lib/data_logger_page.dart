@@ -20,7 +20,6 @@ class _DataLoggerScreenState extends State<DataLoggerScreen> {
   final int _zonesPerPage = 5;
 
   final String apiUrl = 'https://dev.tirtaayu.my.id/api/tekniks/device/';
-  final String apiLogger = 'https://dev.tirtaayu.my.id/api/tekniks/logger/';
   final String bearerToken =
       'Bearer 8|3acT1iWYizq86jljp8FGUmQwLHF6fGSqFQ1gXa3T94fd5111';
 
@@ -38,35 +37,21 @@ class _DataLoggerScreenState extends State<DataLoggerScreen> {
         headers: {'Authorization': bearerToken},
       );
 
-      final responseLogger = await http.get(
-        Uri.parse(apiLogger),
-        headers: {'Authorization': bearerToken},
-      );
-
-      if (responseZona.statusCode == 200 && responseLogger.statusCode == 200) {
+      if (responseZona.statusCode == 200) {
         final List<dynamic> zonaList = jsonDecode(responseZona.body)['data'];
-        final List<dynamic> loggerList = jsonDecode(responseLogger.body)['data'];
-
         List<Zona> loadedZona =
             zonaList.map((item) => Zona.fromJson(item)).toList();
-        List<LoggerData> loadedLogger =
-            loggerList.map((item) => LoggerData.fromJson(item)).toList();
-
-        final Map<String, LoggerData> loggerMap = {
-          for (var logger in loadedLogger) logger.serial: logger
-        };
 
         List<ZoneData> combined = loadedZona.map((zona) {
-          final logger = loggerMap[zona.serial];
           return ZoneData(
             name: zona.nama,
             latitude: zona.lat,
             longitude: zona.long,
-            flow: logger?.flow ?? 0.0,
-            bar: logger?.bar ?? 0.0,
-            min: logger?.min ?? 0.0,
-            lastUpdate: logger?.updatedAt ?? '-',
-            isNormal: (logger?.flow ?? 0) > (logger?.min ?? 0),
+            flow: zona.flow,
+            bar: zona.bar,
+            min: 0.0,
+            lastUpdate: zona.tanggal,
+            isNormal: zona.isNormal,
           );
         }).toList();
 
@@ -76,8 +61,7 @@ class _DataLoggerScreenState extends State<DataLoggerScreen> {
           _currentPage = 0;
         });
       } else {
-        throw Exception(
-            'Failed to fetch data: ${responseZona.statusCode} / ${responseLogger.statusCode}');
+        throw Exception('Failed to fetch data: ${responseZona.statusCode}');
       }
     } catch (e) {
       print("Error: $e");
@@ -92,8 +76,9 @@ class _DataLoggerScreenState extends State<DataLoggerScreen> {
   void _onSearchChanged() {
     final query = _searchController.text.toLowerCase();
     setState(() {
-      filteredZones =
-          zones.where((zone) => zone.name.toLowerCase().contains(query)).toList();
+      filteredZones = zones
+          .where((zone) => zone.name.toLowerCase().contains(query))
+          .toList();
       _currentPage = 0;
     });
   }
@@ -207,17 +192,32 @@ class ZoneCard extends StatelessWidget {
   const ZoneCard({required this.zone, super.key});
 
   void _openMap(BuildContext context) async {
-    final url = Uri.parse(
-        'https://www.google.com/maps/search/?api=1&query=${zone.latitude},${zone.longitude}');
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url);
-    } else {
-      if (!context.mounted) return;
+  if (zone.latitude == 0.0 || zone.longitude == 0.0) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Koordinat tidak valid")),
+    );
+    return;
+  }
+
+  final urlString =
+      'https://www.google.com/maps/search/?api=1&query=${zone.latitude},${zone.longitude}';
+  final Uri url = Uri.parse(urlString);
+
+  try {
+    final launched = await launchUrl(url, mode: LaunchMode.externalApplication);
+    if (!launched && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Tidak dapat membuka Google Maps")),
       );
     }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Gagal membuka peta")),
+      );
+    }
   }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -259,7 +259,7 @@ class ZoneCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 6),
-            Text("💧 Flow : ${zone.flow} L/s (<= Min: ${zone.min})"),
+            Text("💧 Flow : ${zone.flow.toStringAsFixed(2)} L/s"),
             Text("📱 Bar : ${zone.bar.toStringAsFixed(2)}"),
             const SizedBox(height: 4),
             Row(
@@ -286,32 +286,6 @@ class ZoneCard extends StatelessWidget {
   }
 }
 
-class LoggerData {
-  final String serial;
-  final double flow;
-  final double bar;
-  final double min;
-  final String updatedAt;
-
-  LoggerData({
-    required this.serial,
-    required this.flow,
-    required this.bar,
-    required this.min,
-    required this.updatedAt,
-  });
-
-  factory LoggerData.fromJson(Map<String, dynamic> json) {
-    return LoggerData(
-      serial: json['serial'],
-      flow: (json['flow'] as num?)?.toDouble() ?? 0.0,
-      bar: (json['pressure'] as num?)?.toDouble() ?? 0.0,
-      min: (json['totalizer'] as num?)?.toDouble() ?? 0.0,
-      updatedAt: json['updated_at'] ?? '-',
-    );
-  }
-}
-
 class Zona {
   final String tipe;
   final int deviceId;
@@ -319,6 +293,10 @@ class Zona {
   final String nama;
   final double lat;
   final double long;
+  final double flow;
+  final double bar;
+  final String tanggal;
+  final bool isNormal;
 
   Zona({
     required this.tipe,
@@ -327,9 +305,16 @@ class Zona {
     required this.nama,
     required this.lat,
     required this.long,
+    required this.flow,
+    required this.bar,
+    required this.tanggal,
+    required this.isNormal,
   });
 
   factory Zona.fromJson(Map<String, dynamic> json) {
+    double flowVal = double.tryParse(json['flow']?['nilai'] ?? '0') ?? 0.0;
+    double barVal = double.tryParse(json['pressure']?['nilai'] ?? '0') ?? 0.0;
+
     return Zona(
       tipe: json['tipe'],
       deviceId: json['device_id'],
@@ -337,6 +322,10 @@ class Zona {
       nama: json['nama'],
       lat: (json['lat'] as num).toDouble(),
       long: (json['long'] as num).toDouble(),
+      flow: flowVal,
+      bar: barVal,
+      tanggal: json['tanggal'] ?? '-',
+      isNormal: flowVal > 0 && barVal > 0,
     );
   }
 }
