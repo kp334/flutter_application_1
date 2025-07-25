@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'message_page.dart';
 import 'profile_page.dart';
 
@@ -12,31 +14,57 @@ class PressureLoggerPage extends StatefulWidget {
 class _PressureLoggerPageState extends State<PressureLoggerPage> {
   final TextEditingController _searchController = TextEditingController();
   int _currentPage = 1;
-
-  static const Color backgroundColor = Color(0xFFDBF2EF);
-  static const Color tableHeaderColor = Color(0xFF333333);
-  static const Color tableRowColor = Color(0xFF444444);
-
   final int _rowsPerPage = 6;
 
-  final List<Map<String, dynamic>> _data = [
-    {'nama': 'Zona Lebaksiu', 'pressure': 4.43, 'waktu': '15/07/2025 23:04'},
-    {'nama': 'Zona Pengerbarang', 'pressure': 0.0, 'waktu': '15/07/2025 22:59'},
-    {'nama': 'Zona Balapulang', 'pressure': 10.42, 'waktu': '15/07/2025 23:00'},
-    {'nama': 'DMA Bongkok', 'pressure': 0.42, 'waktu': '15/07/2025 22:56'},
-    {'nama': 'DMA Margasari', 'pressure': 0.00, 'waktu': '15/07/2025 22:29'},
-    {'nama': 'DMA Randusari', 'pressure': 5.83, 'waktu': '15/07/2025 22:27'},
-    {'nama': 'PDAB Ujungrusi Barat', 'pressure': 0.00, 'waktu': '15/07/2025 00:00'},
-    {'nama': 'Jatimulya', 'pressure': 4.54, 'waktu': '15/07/2025 22:31'},
-    {'nama': 'Dukuhwringin II', 'pressure': 0.84, 'waktu': '29/11/2024 21:28'},
-  ];
+  List<Map<String, dynamic>> _data = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    fetchPressureData();
+  }
+
+  Future<void> fetchPressureData() async {
+    const String apiUrl = 'https://dev.tirtaayu.my.id/api/tekniks/device/PRESSURE'; // Ganti URL
+    const String token = '8|3acT1iWYizq86jljp8FGUmQwLHF6fGSqFQ1gXa3T94fd5111'; // Ganti dengan token
+
+    try {
+      final response = await http.get(
+        Uri.parse(apiUrl),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        final result = json.decode(response.body);
+        final List rawData = result['data'];
+
+        setState(() {
+          _data = rawData
+              .where((item) => item['tipe'] == 'PRESSURE')
+              .map((item) => {
+                    'nama': item['nama'],
+                    'pressure': double.tryParse(item['pressure']['nilai']) ?? 0.0,
+                    'waktu': item['tanggal'],
+                  })
+              .toList();
+          _isLoading = false;
+        });
+      } else {
+        throw Exception('Gagal memuat data: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error: $e');
+      setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final query = _searchController.text.toLowerCase();
-    final filteredData = _data.where((item) {
-      return item['nama'].toString().toLowerCase().contains(query);
-    }).toList();
+    final filteredData = _data
+        .where((item) => item['nama'].toString().toLowerCase().contains(query))
+        .toList();
 
     final pagedData = filteredData
         .skip((_currentPage - 1) * _rowsPerPage)
@@ -46,155 +74,98 @@ class _PressureLoggerPageState extends State<PressureLoggerPage> {
     final totalPages = (filteredData.length / _rowsPerPage).ceil();
 
     return Scaffold(
-      backgroundColor: backgroundColor,
+      backgroundColor: const Color(0xFFDBF2EF),
       appBar: AppBar(
-        backgroundColor: backgroundColor,
+        backgroundColor: const Color(0xFFDBF2EF),
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          'Pressure Logger',
-          style: TextStyle(color: Colors.black),
-        ),
+        title: const Text('Pressure Logger', style: TextStyle(color: Colors.black)),
         centerTitle: true,
       ),
-      body: Column(
-        children: [
-          const SizedBox(height: 10),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: TextField(
-              controller: _searchController,
-              onChanged: (_) => setState(() => _currentPage = 1),
-              decoration: InputDecoration(
-                hintText: 'Search...',
-                prefixIcon: const Icon(Icons.search),
-                fillColor: Colors.white,
-                filled: true,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Table Header
-          Container(
-            color: tableHeaderColor,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: const [
-                Expanded(
-                  flex: 4,
-                  child: Text(
-                    "Nama",
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                const SizedBox(height: 10),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: (_) => setState(() => _currentPage = 1),
+                    decoration: InputDecoration(
+                      hintText: 'Cari zona...',
+                      prefixIcon: const Icon(Icons.search),
+                      fillColor: Colors.white,
+                      filled: true,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
                   ),
                 ),
+                const SizedBox(height: 16),
                 Expanded(
-                  flex: 3,
-                  child: Text(
-                    "Pressure (bar)",
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Table(
+                      border: TableBorder.symmetric(
+                        inside: BorderSide(color: Colors.black26, width: 1),
+                        outside: BorderSide(color: Colors.black26, width: 1),
+                      ),
+                      columnWidths: const {
+                        0: FlexColumnWidth(4),
+                        1: FlexColumnWidth(3),
+                        2: FlexColumnWidth(3),
+                      },
+                      children: [
+                        _buildTableHeader(),
+                        ...pagedData.map((item) => _buildTableRow(
+                              item['nama'],
+                              item['pressure'].toStringAsFixed(2),
+                              item['waktu'],
+                            )),
+                      ],
+                    ),
                   ),
                 ),
-                Expanded(
-                  flex: 3,
-                  child: Text(
-                    "Waktu",
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                  ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  children: List.generate(totalPages, (index) {
+                    final pageNumber = index + 1;
+                    final isSelected = _currentPage == pageNumber;
+                    return GestureDetector(
+                      onTap: () => setState(() => _currentPage = pageNumber),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isSelected ? Colors.blue : Colors.white,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.grey),
+                        ),
+                        child: Text(
+                          '$pageNumber',
+                          style: TextStyle(color: isSelected ? Colors.white : Colors.black),
+                        ),
+                      ),
+                    );
+                  }),
                 ),
+                const SizedBox(height: 12),
               ],
             ),
-          ),
-
-          // Table Rows
-          Expanded(
-            child: ListView.builder(
-              itemCount: pagedData.length,
-              itemBuilder: (context, index) {
-                final item = pagedData[index];
-                return Container(
-                  color: tableRowColor,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        flex: 4,
-                        child: Text(item['nama'],
-                            style: const TextStyle(color: Colors.white)),
-                      ),
-                      Expanded(
-                        flex: 3,
-                        child: Text(item['pressure'].toString(),
-                            style: const TextStyle(color: Colors.white)),
-                      ),
-                      Expanded(
-                        flex: 3,
-                        child: Text(item['waktu'],
-                            style: const TextStyle(color: Colors.white)),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-
-          // Pagination
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Wrap(
-              spacing: 6,
-              children: List.generate(totalPages, (index) {
-                final pageNumber = index + 1;
-                final isSelected = _currentPage == pageNumber;
-
-                return GestureDetector(
-                  onTap: () => setState(() => _currentPage = pageNumber),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: isSelected ? Colors.blue : Colors.white,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: Colors.grey),
-                    ),
-                    child: Text(
-                      '$pageNumber',
-                      style: TextStyle(
-                        color: isSelected ? Colors.white : Colors.black,
-                      ),
-                    ),
-                  ),
-                );
-              }),
-            ),
-          ),
-        ],
-      ),
-
-      // Bottom Navigation Bar
       bottomNavigationBar: BottomNavigationBar(
-        backgroundColor: backgroundColor,
+        backgroundColor: const Color(0xFFDBF2EF),
         currentIndex: 1,
         selectedItemColor: Colors.blue,
         unselectedItemColor: Colors.grey,
         onTap: (index) {
           if (index == 0) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => const MessagePage()),
-            );
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MessagePage()));
           } else if (index == 2) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => const ProfilePage()),
-            );
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ProfilePage()));
           }
         },
         items: const [
@@ -203,6 +174,46 @@ class _PressureLoggerPageState extends State<PressureLoggerPage> {
           BottomNavigationBarItem(icon: Icon(Icons.person), label: ''),
         ],
       ),
+    );
+  }
+
+  TableRow _buildTableHeader() {
+    return const TableRow(
+      decoration: BoxDecoration(color: Color(0xFF333333)),
+      children: [
+        Padding(
+          padding: EdgeInsets.all(8),
+          child: Text('Nama', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        ),
+        Padding(
+          padding: EdgeInsets.all(8),
+          child: Text('Pressure (bar)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        ),
+        Padding(
+          padding: EdgeInsets.all(8),
+          child: Text('Waktu', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        ),
+      ],
+    );
+  }
+
+  TableRow _buildTableRow(String nama, String pressure, String waktu) {
+    return TableRow(
+      decoration: const BoxDecoration(color: Color(0xFF444444)),
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(8),
+          child: Text(nama, style: const TextStyle(color: Colors.white)),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(8),
+          child: Text(pressure, style: const TextStyle(color: Colors.white)),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(8),
+          child: Text(waktu, style: const TextStyle(color: Colors.white)),
+        ),
+      ],
     );
   }
 }

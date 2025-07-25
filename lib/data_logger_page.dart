@@ -192,32 +192,32 @@ class ZoneCard extends StatelessWidget {
   const ZoneCard({required this.zone, super.key});
 
   void _openMap(BuildContext context) async {
-  if (zone.latitude == 0.0 || zone.longitude == 0.0) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Koordinat tidak valid")),
-    );
-    return;
-  }
-
-  final urlString =
-      'https://www.google.com/maps/search/?api=1&query=${zone.latitude},${zone.longitude}';
-  final Uri url = Uri.parse(urlString);
-
-  try {
-    final launched = await launchUrl(url, mode: LaunchMode.externalApplication);
-    if (!launched && context.mounted) {
+    if (zone.latitude == 0.0 || zone.longitude == 0.0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Tidak dapat membuka Google Maps")),
+        const SnackBar(content: Text("Koordinat tidak valid")),
       );
+      return;
     }
-  } catch (e) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Gagal membuka peta")),
-      );
+
+    final urlString =
+        'https://www.google.com/maps/search/?api=1&query=${zone.latitude},${zone.longitude}';
+    final Uri url = Uri.parse(urlString);
+
+    try {
+      final launched = await launchUrl(url, mode: LaunchMode.externalApplication);
+      if (!launched && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Tidak dapat membuka Google Maps")),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Gagal membuka peta")),
+        );
+      }
     }
   }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -226,7 +226,7 @@ class ZoneCard extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: Theme.of(context).cardColor,
+      color: zone.isNormal ? Theme.of(context).cardColor : Colors.red.shade100,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -315,6 +315,22 @@ class Zona {
     double flowVal = double.tryParse(json['flow']?['nilai'] ?? '0') ?? 0.0;
     double barVal = double.tryParse(json['pressure']?['nilai'] ?? '0') ?? 0.0;
 
+    String tanggalStr = json['tanggal'] ?? '-';
+    DateTime? updateTime;
+    try {
+      updateTime = DateTime.parse(
+        tanggalStr.split('-').reversed.join('-').replaceAll(' ', 'T'),
+      );
+    } catch (_) {
+      updateTime = null;
+    }
+
+    bool isUpToDate = false;
+    if (updateTime != null) {
+      final duration = DateTime.now().difference(updateTime);
+      isUpToDate = duration.inHours <= 24;
+    }
+
     return Zona(
       tipe: json['tipe'],
       deviceId: json['device_id'],
@@ -324,8 +340,8 @@ class Zona {
       long: (json['long'] as num).toDouble(),
       flow: flowVal,
       bar: barVal,
-      tanggal: json['tanggal'] ?? '-',
-      isNormal: flowVal > 0 && barVal > 0,
+      tanggal: tanggalStr,
+      isNormal: isUpToDate,
     );
   }
 }
