@@ -52,6 +52,7 @@ dependencies:
   permission_handler: ^11.3.0
   font_awesome_flutter: ^10.7.0
   csv: ^5.0.2
+  liquid_progress_indicator: ^0.4.0
 
 
 

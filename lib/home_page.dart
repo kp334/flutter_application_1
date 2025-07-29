@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 
+
 import 'pressure_logger_page.dart';
 import 'grafik_level_air_page.dart';
 import 'zona_page.dart';
@@ -29,64 +30,150 @@ class _HomePageState extends State<HomePage> {
   late Timer _timer;
   DateTime _now = DateTime.now();
 
+  List<ZoneData> _allZones = [];
+  List<ZoneData> _filteredZones = [];
+  
+
   List<Map<String, dynamic>> _levelAirData = [];
   bool _isLoadingLevelAir = true;
 
-Future<void> _fetchLevelAirData() async {
-  setState(() => _isLoadingLevelAir = true);
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('token');
+  int _totalAduan = 0;
 
-    if (token == null) {
-      throw Exception('Token tidak ditemukan. Silakan login ulang.');
-    }
+TextEditingController _searchController = TextEditingController();
+String _searchQuery = '';
+List _zonaList = []; // hasil dari API
+Map? _selectedZona;  // zona yang ditampilkan
+
+
+Future<void> _fetchLevelAirData() async {
+  setState(() {
+    _isLoadingLevelAir = true;
+  });
+
+  try {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
 
     final response = await http.get(
       Uri.parse('https://dev.tirtaayu.my.id/api/tekniks/device/LEVEL'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Accept': 'application/json',
-      },
+      headers: {'Authorization': 'Bearer $token'},
     );
-
-    print('Status Code: ${response.statusCode}');
-    print('Raw Response: ${response.body}');
 
     if (response.statusCode == 200) {
       final decoded = json.decode(response.body);
+      final List<dynamic> dataList = decoded['data'] ?? [];
 
-      if (decoded is Map && decoded.containsKey('data')) {
-        final List<dynamic> dataList = decoded['data'];
+      setState(() {
+        _levelAirData = dataList.map((e) {
+          final level = e['level'] ?? {};
+          final nilai = double.tryParse(level['nilai']?.toString() ?? '0') ?? 0.0;
+          final min = double.tryParse(level['min']?.toString() ?? '0') ?? 0.0;
+          final max = double.tryParse(level['max']?.toString() ?? '100') ?? 100.0;
 
-        setState(() {
-          _levelAirData = dataList.map((e) {
-  final level = e['level'] ?? {};
-  return {
-    'nama_reservoir': e['nama'] ?? 'Unknown',
-    'value': double.tryParse(level['nilai']?.toString() ?? '0') ?? 0.0,
-    'min': double.tryParse(level['min']?.toString() ?? '0') ?? 0.0,
-    'max': double.tryParse(level['max']?.toString() ?? '100') ?? 100.0,
-    'unit': level['satuan'] ?? '',
-    'timestamp': e['tanggal'] ?? '-',
-  };
-}).toList();
+          return {
+            'nama_reservoir': e['nama'] ?? 'Unknown',
+            'value': _calculateNormalizedValue(nilai, min, max),
+            'isLow': nilai < min, // tambahan
+            'min': min,
+            'max': max,
+            'unit': level['satuan'] ?? '',
+            'timestamp': e['tanggal'] ?? '-',
+          };
 
-          _isLoadingLevelAir = false;
-        });
-      } else {
-        throw Exception('Format data tidak sesuai');
-      }
-    } else if (response.statusCode == 401) {
-      throw Exception('Token tidak valid atau telah kedaluwarsa. Silakan login ulang.');
+        }).toList();
+
+        _isLoadingLevelAir = false;
+      });
     } else {
-      throw Exception('Gagal memuat data level air: ${response.statusCode}');
+      throw Exception('Gagal memuat data reservoir');
     }
   } catch (e) {
-    print('Fetch error: $e');
-    setState(() => _isLoadingLevelAir = false);
+    print(e);
+    setState(() {
+      _isLoadingLevelAir = false;
+    });
   }
 }
+
+Future<void> _fetchTotalAduan() async {
+  const url = 'https://app.tirtaayu.com/api/dataaduan';
+
+  try {
+    final response = await http.get(Uri.parse(url));
+    final decoded = jsonDecode(response.body);
+
+    if (decoded['status'] == 'success') {
+      final Map<String, dynamic> data = decoded['data'];
+      int total = 0;
+
+      data.forEach((key, value) {
+        final jumlah = int.tryParse(value['total'].toString()) ?? 0;
+        total += jumlah;
+      });
+
+      setState(() {
+        _totalAduan = total;
+      });
+    } else {
+      throw Exception('Gagal memuat data aduan');
+    }
+  } catch (e) {
+    print('Error fetchTotalAduan: $e');
+  }
+}
+
+ZoneData? _singleZone;
+bool _isLoadingZone = true;
+
+Future<void> _fetchAllZones() async {
+  try {
+    final response = await http.get(
+      Uri.parse('https://dev.tirtaayu.my.id/api/tekniks/device/'),
+      headers: {'Authorization': 'Bearer 8|3acT1iWYizq86jljp8FGUmQwLHF6fGSqFQ1gXa3T94fd5111'},
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = json.decode(response.body)['data'];
+
+      List<ZoneData> allZoneList = data.map((item) {
+        final zona = Zona.fromJson(item);
+        return ZoneData(
+          name: zona.nama,
+          latitude: zona.lat,
+          longitude: zona.long,
+          flow: zona.flow,
+          bar: zona.bar,
+          min: 0.0,
+          lastUpdate: zona.tanggal,
+          isNormal: zona.isNormal,
+        );
+      }).toList();
+
+      setState(() {
+        _allZones = allZoneList;
+        _filteredZones = allZoneList;
+        _isLoadingZone = false;
+      });
+    }
+  } catch (e) {
+    print("Error loading all zones: $e");
+    setState(() {
+      _isLoadingZone = false;
+    });
+  }
+}
+
+
+
+double _calculateNormalizedValue(double current, double min, double max) {
+  if (max <= min) return 0.0; // untuk menghindari pembagian nol atau nilai tidak masuk akal
+  if (current >= max) return 1.0;
+  if (current <= min) return 0.0;
+  final normalized = (current - min) / (max - min);
+  return normalized.clamp(0.0, 1.0);
+}
+
+
 
   @override
   void initState() {
@@ -95,6 +182,8 @@ Future<void> _fetchLevelAirData() async {
       setState(() => _now = DateTime.now());
     });
     _fetchLevelAirData();
+    _fetchTotalAduan();
+    _fetchAllZones();
   }
 
   @override
@@ -156,11 +245,11 @@ Future<void> _fetchLevelAirData() async {
                     onTap: () {
                       Navigator.push(context, MaterialPageRoute(builder: (_) => const AduanTerprosesPage()));
                     },
-                    child: const _InfoCard(
+                    child:  _InfoCard(
                       color: Colors.amber,
                       icon: Icons.report,
                       label: 'Total Aduan',
-                      value: '12',
+                      value: _totalAduan.toString(),
                       textColor: Colors.black,
                     ),
                   ),
@@ -200,6 +289,7 @@ Future<void> _fetchLevelAirData() async {
                             title: data['nama_reservoir'],
                             width: levelCardWidth,
                             value: data['value'],
+                            isLow: data['isLow'] ?? false,
                             timestamp: data['timestamp'],
                             onTap: () {
                               Navigator.push(
@@ -222,19 +312,41 @@ Future<void> _fetchLevelAirData() async {
                     width: 140,
                     height: 30,
                     child: TextField(
-                      decoration: InputDecoration(
-                        hintText: 'Search',
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                      ),
+                    controller: _searchController,
+                    onChanged: (value) {
+                      setState(() {
+                        _searchQuery = value.toLowerCase();
+                        _filteredZones = _allZones.where((zone) => zone.name.toLowerCase().contains(_searchQuery)).toList();
+                      });
+                    },
+
+                    decoration: InputDecoration(
+                      hintText: 'Search',
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
                     ),
+                  ),
+
                   ),
                 ],
               ),
               SizedBox(height: vSpacing),
-              const _FlowLoggerCard(),
-              Align(
+              _isLoadingZone
+                ? const Center(child: CircularProgressIndicator())
+                : _filteredZones.isNotEmpty
+                    ? ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _searchQuery.isEmpty ? 1 : _filteredZones.length,
+                        itemBuilder: (context, index) {
+                          return _SingleZoneCard(zone: _filteredZones[index]);
+                        },
+                      )
+                    : const Text('Tidak ada data zone'),
+
+
+                Align(
                 alignment: Alignment.centerRight,
                 child: OutlinedButton(
                   onPressed: () {
@@ -311,12 +423,14 @@ class _LevelCard extends StatelessWidget {
   final double value;
   final String timestamp;
   final VoidCallback? onTap;
+  final bool isLow;
 
   const _LevelCard({
     required this.title,
     required this.width,
     required this.value,
     required this.timestamp,
+    required this.isLow,
     this.onTap,
   });
 
@@ -336,7 +450,7 @@ class _LevelCard extends StatelessWidget {
           children: [
             Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11)),
             const SizedBox(height: 4),
-            Expanded(child: Center(child: _VerticalGauge(value: value))),
+            Expanded(child: Center(child: _VerticalGauge(value: value, isLow: isLow))),
             const SizedBox(height: 4),
             const Text('Level Air', style: TextStyle(fontSize: 10)),
             const SizedBox(height: 2),
@@ -358,16 +472,21 @@ class _LevelCard extends StatelessWidget {
 }
 
 class _VerticalGauge extends StatelessWidget {
-  final double value; // 0.0 - 1.0
+  final double value;
+  final bool isLow;
 
-  const _VerticalGauge({required this.value});
+  const _VerticalGauge({required this.value, required this.isLow});
 
   @override
   Widget build(BuildContext context) {
     final double totalHeight = 80.0;
     final double fillHeight = totalHeight * value.clamp(0.0, 1.0);
 
-    return Container(
+    final fillColor = isLow ? Colors.redAccent : Colors.blueAccent;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOut,
       width: 20,
       height: totalHeight,
       decoration: BoxDecoration(
@@ -378,13 +497,12 @@ class _VerticalGauge extends StatelessWidget {
       child: Stack(
         alignment: Alignment.bottomCenter,
         children: [
-          Container(
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 500),
             height: fillHeight,
             decoration: BoxDecoration(
-              color: Colors.blueAccent,
-              borderRadius: const BorderRadius.vertical(
-                bottom: Radius.circular(6),
-              ),
+              color: fillColor,
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(6)),
             ),
           ),
         ],
@@ -392,6 +510,8 @@ class _VerticalGauge extends StatelessWidget {
     );
   }
 }
+
+
 
 class _FlowLoggerCard extends StatelessWidget {
   const _FlowLoggerCard();
@@ -468,6 +588,91 @@ class _FlowLoggerCard extends StatelessWidget {
   }
 }
 
+class _SingleZoneCard extends StatelessWidget {
+  final ZoneData zone;
+
+  const _SingleZoneCard({required this.zone});
+
+  void _openMap(BuildContext context) async {
+    final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=${zone.latitude},${zone.longitude}');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white70 : Colors.black87;
+    final zoneColor = isDark ? Colors.tealAccent : Colors.teal;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.grey[850] : const Color(0xFFF8F4FA),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Stack(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(zone.name,
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: zoneColor)),
+              const SizedBox(height: 8),
+              _FlowLoggerInfo(
+                label: 'Flow',
+                value: '${zone.flow.toStringAsFixed(2)} L/s',
+                icon: Icons.water_drop,
+                textColor: textColor,
+              ),
+              _FlowLoggerInfo(
+                label: 'Bar',
+                value: zone.bar.toStringAsFixed(2),
+                icon: Icons.speed,
+                textColor: textColor,
+              ),
+              _FlowLoggerInfo(
+                label: 'Update Terakhir',
+                value: zone.lastUpdate,
+                icon: Icons.access_time,
+                textColor: textColor,
+              ),
+              const SizedBox(height: 24),
+            ],
+          ),
+          Positioned(
+            right: 4,
+            top: 4,
+            child: Row(
+              children: [
+                Icon(zone.isNormal ? Icons.check_circle : Icons.error,
+                    color: zone.isNormal ? Colors.green : Colors.red, size: 16),
+                const SizedBox(width: 4),
+                Text(zone.isNormal ? 'Normal' : 'Error',
+                    style: TextStyle(
+                        color: zone.isNormal ? Colors.green : Colors.red,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500)),
+              ],
+            ),
+          ),
+          Positioned(
+            right: 4,
+            bottom: 4,
+            child: InkWell(
+              onTap: () => _openMap(context),
+              child: const Icon(Icons.place, size: 18),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
 class _FlowLoggerInfo extends StatelessWidget {
   final String label;
   final String value;
@@ -523,7 +728,7 @@ class _SideDrawer extends StatelessWidget {
           const ListTile(leading: Icon(Icons.dashboard), title: Text('Dashboard')),
           ListTile(
             leading: const Icon(Icons.water_drop),
-            title: const Text('Flow Logger'),
+            title: const Text('Data Logger'),
             onTap: () {
               Navigator.pop(context);
               Navigator.push(context, MaterialPageRoute(builder: (_) => const DataLoggerScreen()));
@@ -561,4 +766,86 @@ class _SideDrawer extends StatelessWidget {
       ),
     );
   }
+}
+class Zona {
+  final String tipe;
+  final int deviceId;
+  final String serial;
+  final String nama;
+  final double lat;
+  final double long;
+  final double flow;
+  final double bar;
+  final String tanggal;
+  final bool isNormal;
+
+  Zona({
+    required this.tipe,
+    required this.deviceId,
+    required this.serial,
+    required this.nama,
+    required this.lat,
+    required this.long,
+    required this.flow,
+    required this.bar,
+    required this.tanggal,
+    required this.isNormal,
+  });
+
+  factory Zona.fromJson(Map<String, dynamic> json) {
+    double flowVal = double.tryParse(json['flow']?['nilai'] ?? '0') ?? 0.0;
+    double barVal = double.tryParse(json['pressure']?['nilai'] ?? '0') ?? 0.0;
+    String tanggalStr = json['tanggal'] ?? '-';
+
+    DateTime? updateTime;
+    try {
+      final parts = tanggalStr.split(' ');
+      final dateParts = parts[0].split('-');
+      final formattedDate = '${dateParts[2]}-${dateParts[1]}-${dateParts[0]}T${parts[1]}';
+      updateTime = DateTime.parse(formattedDate);
+    } catch (_) {
+      updateTime = null;
+    }
+
+    bool isUpToDate = false;
+    if (updateTime != null) {
+      final duration = DateTime.now().difference(updateTime);
+      isUpToDate = duration.inHours <= 24;
+    }
+
+    return Zona(
+      tipe: json['tipe'],
+      deviceId: json['device_id'],
+      serial: json['serial'],
+      nama: json['nama'],
+      lat: (json['lat'] as num).toDouble(),
+      long: (json['long'] as num).toDouble(),
+      flow: flowVal,
+      bar: barVal,
+      tanggal: tanggalStr,
+      isNormal: isUpToDate,
+    );
+  }
+}
+
+class ZoneData {
+  final String name;
+  final double latitude;
+  final double longitude;
+  final double flow;
+  final double bar;
+  final double min;
+  final String lastUpdate;
+  final bool isNormal;
+
+  ZoneData({
+    required this.name,
+    required this.latitude,
+    required this.longitude,
+    required this.flow,
+    required this.bar,
+    required this.min,
+    required this.lastUpdate,
+    required this.isNormal,
+  });
 }

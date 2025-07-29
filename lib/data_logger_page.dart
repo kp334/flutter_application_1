@@ -110,7 +110,13 @@ class _DataLoggerScreenState extends State<DataLoggerScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          IconButton(onPressed: _loadZones, icon: const Icon(Icons.refresh)),
+          IconButton(
+            onPressed: () {
+              _searchController.clear();
+              _loadZones();
+            },
+            icon: const Icon(Icons.refresh),
+          ),
         ],
       ),
       body: Column(
@@ -244,11 +250,13 @@ class ZoneCard extends StatelessWidget {
                 ),
                 Row(
                   children: [
-                    Icon(zone.isNormal ? Icons.check_circle : Icons.error,
-                        color: zone.isNormal ? Colors.green : Colors.red),
+                    Icon(
+                      zone.isNormal ? Icons.check_circle : Icons.error,
+                      color: zone.isNormal ? Colors.green : Colors.red,
+                    ),
                     const SizedBox(width: 4),
                     Text(
-                      zone.isNormal ? "Normal" : "ERROR",
+                      zone.isNormal ? "Normal" : "Error",
                       style: TextStyle(
                         color: zone.isNormal ? Colors.green : Colors.red,
                         fontWeight: FontWeight.bold,
@@ -317,10 +325,12 @@ class Zona {
 
     String tanggalStr = json['tanggal'] ?? '-';
     DateTime? updateTime;
+
     try {
-      updateTime = DateTime.parse(
-        tanggalStr.split('-').reversed.join('-').replaceAll(' ', 'T'),
-      );
+      final parts = tanggalStr.split(' ');
+      final dateParts = parts[0].split('-');
+      final formattedDate = '${dateParts[2]}-${dateParts[1]}-${dateParts[0]}T${parts[1]}';
+      updateTime = DateTime.parse(formattedDate);
     } catch (_) {
       updateTime = null;
     }

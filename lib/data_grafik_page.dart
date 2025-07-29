@@ -1,11 +1,14 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'data_table_page.dart'; // <--- Tambahkan ini
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'data_table_page.dart';
 
 class GrafikPage extends StatefulWidget {
   final String zoneName;
   const GrafikPage({super.key, required this.zoneName});
+
 
   @override
   State<GrafikPage> createState() => _GrafikPageState();
@@ -13,17 +16,10 @@ class GrafikPage extends StatefulWidget {
 
 class _GrafikPageState extends State<GrafikPage> {
   final DateFormat dateTimeFormat = DateFormat("dd-MM-yyyy HH:mm");
-  final TextEditingController startController = TextEditingController(text: "02-07-2025 00:00");
-  final TextEditingController endController = TextEditingController(text: "02-07-2025 23:59");
+  final TextEditingController startController = TextEditingController();
+  final TextEditingController endController = TextEditingController();
 
-  final allTableData = [
-    {"datetime": "2025-07-02 00:12", "flow": "3.93", "pressure": "0", "totalizer": "382347"},
-    {"datetime": "2025-07-02 01:17", "flow": "3.89", "pressure": "0", "totalizer": "382351"},
-    {"datetime": "2025-07-02 03:23", "flow": "3.92", "pressure": "0", "totalizer": "382355"},
-    {"datetime": "2025-07-02 10:10", "flow": "3.75", "pressure": "0", "totalizer": "382360"},
-    {"datetime": "2025-07-02 22:00", "flow": "3.70", "pressure": "0", "totalizer": "382370"},
-  ];
-
+  List<Map<String, String>> allTableData = [];
   List<Map<String, String>> filteredData = [];
 
   List<FlSpot> flowSpots = [];
@@ -32,9 +28,31 @@ class _GrafikPageState extends State<GrafikPage> {
   @override
   void initState() {
     super.initState();
-    filteredData = allTableData;
-    flowSpots = generateFlowSpots(filteredData);
-    totalizerSpots = generateTotalizerSpots(filteredData);
+    final now = DateTime.now();
+    startController.text = dateTimeFormat.format(DateTime(now.year, now.month, now.day, 0, 0));
+    endController.text = dateTimeFormat.format(DateTime(now.year, now.month, now.day, 23, 59));
+    fetchChartData();
+  }
+
+  Future<void> fetchChartData() async {
+    final url = 'https://dev.tirtaayu.my.id/api/tekniks/history/${widget.zoneName}';
+    final token = 'Bearer 8|3acT1iWYizq86jljp8FGUmQwLHF6fGSqFQ1gXa3T94fd5111';
+
+    try {
+      final response = await http.get(Uri.parse(url), headers: {'Authorization': token});
+      if (response.statusCode == 200) {
+        final List<dynamic> rawData = jsonDecode(response.body);
+        allTableData = rawData.map((entry) => {
+          "datetime": entry["tanggal"].toString().substring(0, 16),
+          "flow": entry["flow"].toString(),
+          "pressure": entry["pressure"].toString(),
+          "totalizer": entry["totalizer"].toString(),
+        }).toList();
+        filterData();
+      }
+    } catch (e) {
+      debugPrint("Error fetching chart data: $e");
+    }
   }
 
   void filterData() {
@@ -49,8 +67,8 @@ class _GrafikPageState extends State<GrafikPage> {
                  entryDate.isBefore(endDate.add(const Duration(minutes: 1)));
         }).toList();
 
-        flowSpots = generateFlowSpots(filteredData);
-        totalizerSpots = generateTotalizerSpots(filteredData);
+        flowSpots = generateSpots(filteredData, 'flow');
+        totalizerSpots = generateSpots(filteredData, 'totalizer', divideBy: 100000);
       });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -59,21 +77,17 @@ class _GrafikPageState extends State<GrafikPage> {
     }
   }
 
-  List<FlSpot> generateFlowSpots(List<Map<String, String>> data) {
+  List<FlSpot> generateSpots(List<Map<String, String>> data, String field, {double divideBy = 1}) {
     return data.asMap().entries.map((e) {
-      return FlSpot(e.key.toDouble(), double.tryParse(e.value['flow']!) ?? 0);
-    }).toList();
-  }
-
-  List<FlSpot> generateTotalizerSpots(List<Map<String, String>> data) {
-    return data.asMap().entries.map((e) {
-      return FlSpot(e.key.toDouble(), (double.tryParse(e.value['totalizer']!) ?? 0) / 100000);
+      return FlSpot(e.key.toDouble(), (double.tryParse(e.value[field]!) ?? 0) / divideBy);
     }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
     final latestFlow = flowSpots.isNotEmpty ? flowSpots.last.y.toStringAsFixed(2) : "0.00";
+    final latestPressure = filteredData.isNotEmpty ? filteredData.last['pressure'] ?? '0.00' : '0.00';
+    final latestTime = filteredData.isNotEmpty ? filteredData.last['datetime'] ?? '' : '';
 
     return Scaffold(
       appBar: AppBar(
@@ -93,7 +107,6 @@ class _GrafikPageState extends State<GrafikPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Flow Info
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Column(
@@ -112,21 +125,18 @@ class _GrafikPageState extends State<GrafikPage> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.baseline,
                     textBaseline: TextBaseline.alphabetic,
-                    children: const [
-                      Text("0.00", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                      SizedBox(width: 6),
-                      Text("Bar", style: TextStyle(fontSize: 16)),
+                    children: [
+                      Text(latestPressure, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 6),
+                      const Text("Bar", style: TextStyle(fontSize: 16)),
                     ],
                   ),
                   const SizedBox(height: 6),
-                  const Text("Update 02/07/2025, 11:45", style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text("Update $latestTime", style: const TextStyle(fontWeight: FontWeight.bold)),
                 ],
               ),
             ),
-
             const SizedBox(height: 12),
-
-            // Grafik
             SizedBox(
               height: 260,
               width: double.infinity,
@@ -200,7 +210,6 @@ class _GrafikPageState extends State<GrafikPage> {
                 ),
               ),
             ),
-
             const SizedBox(height: 6),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -210,10 +219,7 @@ class _GrafikPageState extends State<GrafikPage> {
                 LegendItem(color: Colors.purple, text: 'Totalizer'),
               ],
             ),
-
             const SizedBox(height: 12),
-
-            // Filter Tanggal
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Column(
@@ -266,15 +272,12 @@ class _GrafikPageState extends State<GrafikPage> {
                 ],
               ),
             ),
-
             const SizedBox(height: 12),
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 12),
               child: Text("DATA GRAFIK", style: TextStyle(fontWeight: FontWeight.bold)),
             ),
             const SizedBox(height: 6),
-
-            // Tabel Data (Filtered)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Table(
@@ -331,7 +334,6 @@ class _GrafikPageState extends State<GrafikPage> {
                 ],
               ),
             ),
-
             const SizedBox(height: 10),
             Center(
               child: ElevatedButton(
