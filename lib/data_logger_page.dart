@@ -23,6 +23,10 @@ class _DataLoggerScreenState extends State<DataLoggerScreen> {
   final String bearerToken =
       'Bearer 8|3acT1iWYizq86jljp8FGUmQwLHF6fGSqFQ1gXa3T94fd5111';
 
+  // Loading & Error state
+  bool _isLoading = true;
+  String? _errorMessage;
+
   @override
   void initState() {
     super.initState();
@@ -31,6 +35,11 @@ class _DataLoggerScreenState extends State<DataLoggerScreen> {
   }
 
   Future<void> _loadZones() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
     try {
       final responseZona = await http.get(
         Uri.parse(apiUrl),
@@ -51,25 +60,24 @@ class _DataLoggerScreenState extends State<DataLoggerScreen> {
             bar: zona.bar,
             min: 0.0,
             lastUpdate: zona.tanggal,
-            isNormal: zona.isNormal,
+            isNormal: zona.isNormal, // sudah mempertimbangkan flow > 0
           );
         }).toList();
 
+        if (!mounted) return;
         setState(() {
           zones = combined;
           filteredZones = combined;
           _currentPage = 0;
         });
       } else {
-        throw Exception('Failed to fetch data: ${responseZona.statusCode}');
+        _errorMessage = 'Gagal memuat data (HTTP ${responseZona.statusCode}).';
       }
     } catch (e) {
-      print("Error: $e");
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Gagal memuat data dari API")),
-        );
-      }
+      _errorMessage = 'Gagal memuat data dari API.';
+    } finally {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
     }
   }
 
@@ -85,6 +93,7 @@ class _DataLoggerScreenState extends State<DataLoggerScreen> {
 
   @override
   void dispose() {
+    _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
     super.dispose();
   }
@@ -92,13 +101,20 @@ class _DataLoggerScreenState extends State<DataLoggerScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final totalPages = (filteredZones.length / _zonesPerPage).ceil();
-    final start = _currentPage * _zonesPerPage;
-    final end = start + _zonesPerPage;
-    final pageZones = filteredZones.sublist(
-      start,
-      end > filteredZones.length ? filteredZones.length : end,
-    );
+
+    final int totalPages =
+        filteredZones.isEmpty ? 1 : (filteredZones.length / _zonesPerPage).ceil();
+
+    // Pastikan index halaman valid
+    final int safePage = _currentPage.clamp(0, totalPages - 1);
+    final int start = safePage * _zonesPerPage;
+    final int end = (start + _zonesPerPage) > filteredZones.length
+        ? filteredZones.length
+        : (start + _zonesPerPage);
+    final List<ZoneData> pageZones =
+        (filteredZones.isEmpty || start >= filteredZones.length)
+            ? const <ZoneData>[]
+            : filteredZones.sublist(start, end);
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -113,7 +129,7 @@ class _DataLoggerScreenState extends State<DataLoggerScreen> {
           IconButton(
             onPressed: () {
               _searchController.clear();
-              _loadZones();
+              _loadZones(); // otomatis set _isLoading = true, tampil spinner
             },
             icon: const Icon(Icons.refresh),
           ),
@@ -135,26 +151,64 @@ class _DataLoggerScreenState extends State<DataLoggerScreen> {
               ),
             ),
           ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: pageZones.length,
-              itemBuilder: (context, index) {
-                final zone = pageZones[index];
-                return GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => GrafikPage(zoneName: zone.name),
+
+          // ====== STATE AREA: Loading / Error / Content ======
+          if (_isLoading)
+            const Expanded(
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_errorMessage != null)
+            Expanded(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                      const SizedBox(height: 12),
+                      Text(
+                        _errorMessage!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
-                    );
-                  },
-                  child: ZoneCard(zone: zone),
-                );
-              },
+                      const SizedBox(height: 12),
+                      ElevatedButton.icon(
+                        onPressed: _loadZones,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Coba Lagi'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          else if (filteredZones.isEmpty)
+            const Expanded(
+              child: Center(child: Text('Tidak ada data zone')),
+            )
+          else
+            Expanded(
+              child: ListView.builder(
+                itemCount: pageZones.length,
+                itemBuilder: (context, index) {
+                  final zone = pageZones[index];
+                  return GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => GrafikPage(zoneName: zone.name),
+                        ),
+                      );
+                    },
+                    child: ZoneCard(zone: zone),
+                  );
+                },
+              ),
             ),
-          ),
-          if (totalPages > 1)
+
+          if (totalPages > 1 && filteredZones.isNotEmpty && !_isLoading && _errorMessage == null)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 10),
               child: Row(
@@ -320,16 +374,26 @@ class Zona {
   });
 
   factory Zona.fromJson(Map<String, dynamic> json) {
-    double flowVal = double.tryParse(json['flow']?['nilai'] ?? '0') ?? 0.0;
-    double barVal = double.tryParse(json['pressure']?['nilai'] ?? '0') ?? 0.0;
+    // Ambil nilai flow & pressure dari dynamic (num/String) secara aman
+    final flowRaw = json['flow']?['nilai'];
+    final pressureRaw = json['pressure']?['nilai'];
 
-    String tanggalStr = json['tanggal'] ?? '-';
+    final double flowVal = (flowRaw is num)
+        ? flowRaw.toDouble()
+        : double.tryParse(flowRaw?.toString() ?? '0') ?? 0.0;
+
+    final double barVal = (pressureRaw is num)
+        ? pressureRaw.toDouble()
+        : double.tryParse(pressureRaw?.toString() ?? '0') ?? 0.0;
+
+    final String tanggalStr = json['tanggal'] ?? '-';
+
     DateTime? updateTime;
-
     try {
       final parts = tanggalStr.split(' ');
       final dateParts = parts[0].split('-');
-      final formattedDate = '${dateParts[2]}-${dateParts[1]}-${dateParts[0]}T${parts[1]}';
+      final formattedDate =
+          '${dateParts[2]}-${dateParts[1]}-${dateParts[0]}T${parts[1]}';
       updateTime = DateTime.parse(formattedDate);
     } catch (_) {
       updateTime = null;
@@ -341,6 +405,9 @@ class Zona {
       isUpToDate = duration.inHours <= 24;
     }
 
+    // Aturan: zona Normal jika data up-to-date DAN flow > 0
+    final bool normal = isUpToDate && flowVal > 0;
+
     return Zona(
       tipe: json['tipe'],
       deviceId: json['device_id'],
@@ -351,7 +418,7 @@ class Zona {
       flow: flowVal,
       bar: barVal,
       tanggal: tanggalStr,
-      isNormal: isUpToDate,
+      isNormal: normal,
     );
   }
 }

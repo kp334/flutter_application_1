@@ -5,9 +5,11 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:math' as math;
 
 
 
+import 'data_grafik_page.dart';
 import 'pressure_logger_page.dart';
 import 'grafik_level_air_page.dart';
 import 'zona_page.dart';
@@ -63,27 +65,34 @@ Future<void> _fetchLevelAirData() async {
       final decoded = json.decode(response.body);
       final List<dynamic> dataList = decoded['data'] ?? [];
 
+      // === GANTI blok setState lama dengan yang ini ===
       setState(() {
-        _levelAirData = dataList.map((e) {
-          final level = e['level'] ?? {};
-          final nilai = double.tryParse(level['nilai']?.toString() ?? '0') ?? 0.0;
-          final min = double.tryParse(level['min']?.toString() ?? '0') ?? 0.0;
-          final max = double.tryParse(level['max']?.toString() ?? '100') ?? 100.0;
+  _levelAirData = dataList.map((e) {
+    final level = e['level'] ?? {};
+    final nilai = double.tryParse(level['nilai']?.toString() ?? '0') ?? 0.0;
 
-          return {
-            'nama_reservoir': e['nama'] ?? 'Unknown',
-            'value': _calculateNormalizedValue(nilai, min, max),
-            'isLow': nilai < min, // tambahan
-            'min': min,
-            'max': max,
-            'unit': level['satuan'] ?? '',
-            'timestamp': e['tanggal'] ?? '-',
-          };
+    // Ambang bawaan API tetap dipakai untuk flag/warna
+    final apiMin = double.tryParse(level['min']?.toString() ?? '0') ?? 0.0;
 
-        }).toList();
+    // >>> Pakai skala tetap 0–400 cm untuk gauge
+    const double gaugeMin = 0.0;
+    const double gaugeMax = 400.0;
 
-        _isLoadingLevelAir = false;
-      });
+    return {
+      'nama_reservoir': e['nama'] ?? 'Unknown',
+      'current': nilai,
+      'min': gaugeMin,   // <— min air tabung
+      'max': gaugeMax,   // <— max air tabung
+      'unit': level['satuan'] ?? '',
+      'isLow': nilai < apiMin, // tetap merah bila di bawah ambang API
+      'timestamp': e['tanggal'] ?? '-',
+    };
+  }).toList();
+
+  _isLoadingLevelAir = false;
+});
+
+      // === sampai sini ===
     } else {
       throw Exception('Gagal memuat data reservoir');
     }
@@ -288,7 +297,10 @@ double _calculateNormalizedValue(double current, double min, double max) {
                           return _LevelCard(
                             title: data['nama_reservoir'],
                             width: levelCardWidth,
-                            value: data['value'],
+                            current: data['current'],
+                            min: data['min'],
+                            max: data['max'],
+                            unit: data['unit'],
                             isLow: data['isLow'] ?? false,
                             timestamp: data['timestamp'],
                             onTap: () {
@@ -420,7 +432,10 @@ class _InfoCard extends StatelessWidget {
 class _LevelCard extends StatelessWidget {
   final String title;
   final double width;
-  final double value;
+  final double current;
+  final double min;
+  final double max;
+  final String unit;
   final String timestamp;
   final VoidCallback? onTap;
   final bool isLow;
@@ -428,7 +443,10 @@ class _LevelCard extends StatelessWidget {
   const _LevelCard({
     required this.title,
     required this.width,
-    required this.value,
+    required this.current,
+    required this.min,
+    required this.max,
+    required this.unit,
     required this.timestamp,
     required this.isLow,
     this.onTap,
@@ -450,9 +468,24 @@ class _LevelCard extends StatelessWidget {
           children: [
             Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11)),
             const SizedBox(height: 4),
-            Expanded(child: Center(child: _VerticalGauge(value: value, isLow: isLow))),
+
+            // <<< GANTI BAGIAN GAUGE DI SINI >>>
+            Expanded(
+              child: Center(
+                child: _VerticalGauge(
+                  current: current,
+                  min: min,
+                  max: max,
+                  isLow: isLow,
+                  width: 26,
+                  height: 110,
+                ),
+              ),
+            ),
+            // <<< SAMPAI SINI >>>
+
             const SizedBox(height: 4),
-            const Text('Level Air', style: TextStyle(fontSize: 10)),
+            Text('${current.toStringAsFixed(2)} $unit', style: const TextStyle(fontSize: 10)),
             const SizedBox(height: 2),
             Container(
               height: 18,
@@ -471,44 +504,214 @@ class _LevelCard extends StatelessWidget {
   }
 }
 
-class _VerticalGauge extends StatelessWidget {
-  final double value;
+class _VerticalGauge extends StatefulWidget {
+  final double current;
+  final double min;
+  final double max;
   final bool isLow;
 
-  const _VerticalGauge({required this.value, required this.isLow});
+  // opsional: bisa diubah kalau mau
+  final double width;
+  final double height;
+
+  const _VerticalGauge({
+    required this.current,
+    required this.min,
+    required this.max,
+    required this.isLow,
+    this.width = 24,
+    this.height = 100,
+  });
+
+  @override
+  State<_VerticalGauge> createState() => _VerticalGaugeState();
+}
+
+class _VerticalGaugeState extends State<_VerticalGauge>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  double _targetProgress = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3),
+    )..repeat(); // gelombang jalan pelan terus
+
+    _targetProgress = _normalize(widget.current, widget.min, widget.max);
+  }
+
+  @override
+  void didUpdateWidget(covariant _VerticalGauge oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // jika nilai API berubah, sesuaikan target progress
+    _targetProgress = _normalize(widget.current, widget.min, widget.max);
+  }
+
+  static double _normalize(double current, double min, double max) {
+    if (max <= min) return 0.0;
+    return ((current - min) / (max - min)).clamp(0.0, 1.0);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final double totalHeight = 80.0;
-    final double fillHeight = totalHeight * value.clamp(0.0, 1.0);
+    final borderRadius = BorderRadius.circular(8);
+    final glassColor = Colors.white;
 
-    final fillColor = isLow ? Colors.redAccent : Colors.blueAccent;
+    final Color fillColor =
+        widget.isLow ? Colors.redAccent : Colors.blueAccent;
 
-    return AnimatedContainer(
+    return TweenAnimationBuilder<double>(
+      // animasi pelan saat ketinggian air berubah
+      tween: Tween(begin: 0, end: _targetProgress),
       duration: const Duration(milliseconds: 500),
       curve: Curves.easeInOut,
-      width: 20,
-      height: totalHeight,
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey),
-        borderRadius: BorderRadius.circular(6),
-        color: Colors.white,
-      ),
-      child: Stack(
-        alignment: Alignment.bottomCenter,
-        children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 500),
-            height: fillHeight,
-            decoration: BoxDecoration(
-              color: fillColor,
-              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(6)),
-            ),
+      builder: (context, progress, _) {
+        return SizedBox(
+          width: widget.width,
+          height: widget.height,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Tabung / gelas
+              Container(
+                decoration: BoxDecoration(
+                  color: glassColor,
+                  border: Border.all(color: Colors.grey),
+                  borderRadius: borderRadius,
+                ),
+              ),
+
+              // Isi air (gelombang)
+              Padding(
+                padding: const EdgeInsets.all(2), // ruang untuk border
+                child: ClipRRect(
+                  borderRadius: borderRadius.subtract(
+                    const BorderRadius.all(Radius.circular(2)),
+                  ),
+                  child: AnimatedBuilder(
+                    animation: _controller,
+                    builder: (context, _) {
+                      return CustomPaint(
+                        painter: _WavePainter(
+                          progress: progress,
+                          phase: _controller.value * 2 * 3.1415926535,
+                          color: fillColor,
+                        ),
+                        size: Size(widget.width - 4, widget.height - 4),
+                      );
+                    },
+                  ),
+                ),
+              ),
+
+              // Highlight kaca tipis di depan (biar lebih “tabung”)
+              IgnorePointer(
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: borderRadius,
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.centerLeft,
+                      colors: [
+                        Colors.white.withOpacity(0.25),
+                        Colors.transparent,
+                      ],
+                      stops: const [0.0, 0.6],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
+}
+
+class _WavePainter extends CustomPainter {
+  final double progress; // 0.0 - 1.0 (ketinggian air)
+  final double phase;    // pergeseran gelombang (animasi)
+  final Color color;
+
+  _WavePainter({
+    required this.progress,
+    required this.phase,
+    required this.color,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double width = size.width;
+    final double height = size.height;
+
+    // tinggi permukaan air (0 = bawah, height = atas)
+    final double baseY = height * (1.0 - progress);
+
+    // Parameter gelombang
+    final double amplitude = 4.0;        // tinggi gelombang
+    final double frequency = 2.0;        // jumlah puncak
+    final double secondPhaseShift = 1.2; // untuk gelombang kedua
+
+    // path gelombang pertama
+    final Path path1 = Path()..moveTo(0, height);
+    for (double x = 0; x <= width; x++) {
+      final double y = baseY +
+          amplitude *
+              Math.sin((x / width * 2 * Math.pi * frequency) + phase);
+      path1.lineTo(x, y);
+    }
+    path1
+      ..lineTo(width, height)
+      ..close();
+
+    // path gelombang kedua (lebih halus, sedikit transparan)
+    final Path path2 = Path()..moveTo(0, height);
+    for (double x = 0; x <= width; x++) {
+      final double y = baseY +
+          (amplitude * 0.6) *
+              Math.sin(
+                  (x / width * 2 * Math.pi * (frequency * 1.2)) + phase + secondPhaseShift);
+      path2.lineTo(x, y);
+    }
+    path2
+      ..lineTo(width, height)
+      ..close();
+
+    // cat isi
+    final Paint p1 = Paint()..color = color.withOpacity(0.85);
+    final Paint p2 = Paint()..color = color.withOpacity(0.55);
+
+    // gambar dari belakang ke depan
+    canvas.drawPath(path1, p1);
+    canvas.drawPath(path2, p2);
+  }
+
+  @override
+  bool shouldRepaint(covariant _WavePainter oldDelegate) {
+    // repaint saat tinggi/phase berubah
+    return oldDelegate.progress != progress ||
+        oldDelegate.phase != phase ||
+        oldDelegate.color != color;
+  }
+}
+
+// util sin/cos untuk CustomPainter
+class Math {
+  static const double pi = 3.1415926535897932;
+  static double sin(double x) => Math._tableSin(x);
+  static double _tableSin(double x) => Math._sin(x);
+  static double _sin(double x) => Math._dartSin(x);
+  static double _dartSin(double x) => math.sin(x);
 }
 
 
@@ -594,9 +797,39 @@ class _SingleZoneCard extends StatelessWidget {
   const _SingleZoneCard({required this.zone});
 
   void _openMap(BuildContext context) async {
-    final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=${zone.latitude},${zone.longitude}');
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
+    final lat = zone.latitude;
+    final lon = zone.longitude;
+
+    // Validasi sederhana koordinat
+    if ((lat == 0.0 && lon == 0.0) || lat.isNaN || lon.isNaN) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Koordinat tidak valid')),
+        );
+      }
+      return;
+    }
+
+    // Web Google Maps (aman & ter-encode)
+    final Uri url = Uri.https(
+      'www.google.com',
+      '/maps/search/',
+      {'api': '1', 'query': '$lat,$lon'},
+    );
+
+    try {
+      final ok = await launchUrl(url, mode: LaunchMode.externalApplication);
+      if (!ok && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tidak dapat membuka Google Maps Web')),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Gagal membuka peta')),
+        );
+      }
     }
   }
 
@@ -606,71 +839,96 @@ class _SingleZoneCard extends StatelessWidget {
     final textColor = isDark ? Colors.white70 : Colors.black87;
     final zoneColor = isDark ? Colors.tealAccent : Colors.teal;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: isDark ? Colors.grey[850] : const Color(0xFFF8F4FA),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Stack(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(zone.name,
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: zoneColor)),
-              const SizedBox(height: 8),
-              _FlowLoggerInfo(
-                label: 'Flow',
-                value: '${zone.flow.toStringAsFixed(2)} L/s',
-                icon: Icons.water_drop,
-                textColor: textColor,
-              ),
-              _FlowLoggerInfo(
-                label: 'Bar',
-                value: zone.bar.toStringAsFixed(2),
-                icon: Icons.speed,
-                textColor: textColor,
-              ),
-              _FlowLoggerInfo(
-                label: 'Update Terakhir',
-                value: zone.lastUpdate,
-                icon: Icons.access_time,
-                textColor: textColor,
-              ),
-              const SizedBox(height: 24),
-            ],
+    return InkWell(
+      // Klik kartu: menuju halaman grafik
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => GrafikPage(zoneName: zone.name),
           ),
-          Positioned(
-            right: 4,
-            top: 4,
-            child: Row(
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isDark ? Colors.grey[850] : const Color(0xFFF8F4FA),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Stack(
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(zone.isNormal ? Icons.check_circle : Icons.error,
-                    color: zone.isNormal ? Colors.green : Colors.red, size: 16),
-                const SizedBox(width: 4),
-                Text(zone.isNormal ? 'Normal' : 'Error',
-                    style: TextStyle(
-                        color: zone.isNormal ? Colors.green : Colors.red,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500)),
+                Text(
+                  zone.name,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: zoneColor,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _FlowLoggerInfo(
+                  label: 'Flow',
+                  value: '${zone.flow.toStringAsFixed(2)} L/s',
+                  icon: Icons.water_drop,
+                  textColor: textColor,
+                ),
+                _FlowLoggerInfo(
+                  label: 'Bar',
+                  value: zone.bar.toStringAsFixed(2),
+                  icon: Icons.speed,
+                  textColor: textColor,
+                ),
+                _FlowLoggerInfo(
+                  label: 'Update Terakhir',
+                  value: zone.lastUpdate,
+                  icon: Icons.access_time,
+                  textColor: textColor,
+                ),
+                const SizedBox(height: 24),
               ],
             ),
-          ),
-          Positioned(
-            right: 4,
-            bottom: 4,
-            child: InkWell(
-              onTap: () => _openMap(context),
-              child: const Icon(Icons.place, size: 18),
+            Positioned(
+              right: 4,
+              top: 4,
+              child: Row(
+                children: [
+                  Icon(
+                    zone.isNormal ? Icons.check_circle : Icons.error,
+                    color: zone.isNormal ? Colors.green : Colors.red,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    zone.isNormal ? 'Normal' : 'Error',
+                    style: TextStyle(
+                      color: zone.isNormal ? Colors.green : Colors.red,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: IconButton(
+                tooltip: 'Buka di Google Maps',
+                icon: const Icon(Icons.place, size: 20),
+                onPressed: () => _openMap(context),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
+
 
 
 class _FlowLoggerInfo extends StatelessWidget {
