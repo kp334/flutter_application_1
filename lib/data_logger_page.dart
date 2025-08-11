@@ -212,7 +212,7 @@ class _DataLoggerScreenState extends State<DataLoggerScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 10),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisAlignment: MainAxisAlignment.center, 
                 children: List.generate(totalPages, (i) {
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4),

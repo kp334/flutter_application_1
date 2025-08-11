@@ -25,13 +25,39 @@ class _GrafikPageState extends State<GrafikPage> {
   List<Map<String, String>> allTableData = [];
   List<Map<String, String>> filteredData = [];
 
-  // Titik-titik untuk chart
   List<FlSpot> flowSpots = [];
   List<FlSpot> totalizerSpots = [];
+  List<FlSpot> pressureSpots = [];
+
+
 
   // State UI
   bool isLoading = false;
   String? errorMessage;
+
+  Future<void> pickDateTime(TextEditingController controller) async {
+  final initialDate = DateTime.now();
+  final date = await showDatePicker(
+    context: context,
+    initialDate: initialDate,
+    firstDate: DateTime(2020),
+    lastDate: DateTime(2100),
+  );
+
+  if (date == null) return;
+
+  final time = await showTimePicker(
+    context: context,
+    initialTime: TimeOfDay.fromDateTime(initialDate),
+  );
+
+  if (time == null) return;
+
+  final selectedDateTime = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+  controller.text = inputFormat.format(selectedDateTime);
+}
+
+
 
   @override
   void initState() {
@@ -168,21 +194,59 @@ class _GrafikPageState extends State<GrafikPage> {
         return da.compareTo(db);
       });
 
-      final newFlowSpots = <FlSpot>[];
-      final newTotalizerSpots = <FlSpot>[];
+List<FlSpot> newFlowSpots = [];
+List<FlSpot> newTotalizerSpots = [];
+List<FlSpot> newPressureSpots = [];
 
-      for (var i = 0; i < filtered.length; i++) {
-        final f = double.tryParse(filtered[i]['flow'] ?? '0') ?? 0;
-        final t = double.tryParse(filtered[i]['totalizer'] ?? '0') ?? 0;
-        newFlowSpots.add(FlSpot(i.toDouble(), f));
-        newTotalizerSpots.add(FlSpot(i.toDouble(), t / 100000)); // scaling
-      }
+for (var i = 0; i < filtered.length; i++) {
+  final flowMap = filtered[i]['flow'];
+  final totalizerMap = filtered[i]['totalizer'];
+  final pressureMap = filtered[i]['pressure'];
 
-      setState(() {
-        filteredData = filtered;
-        flowSpots = newFlowSpots;
-        totalizerSpots = newTotalizerSpots;
-      });
+  double? _toDouble(dynamic value) {
+  try {
+    if (value == null) return null;
+    return double.parse(value.toString());
+  } catch (_) {
+    return null;
+  }
+}
+
+
+final flow = _toDouble(filtered[i]['flow']);
+final totalizer = _toDouble(filtered[i]['totalizer']);
+final pressure = _toDouble(filtered[i]['pressure']);
+
+newFlowSpots.add(FlSpot(i.toDouble(), flow ?? 0));
+newTotalizerSpots.add(FlSpot(i.toDouble(), (totalizer ?? 0) / 100000));
+newPressureSpots.add(FlSpot(i.toDouble(), pressure ?? 0));
+}
+
+print('Total titik pressure: ${pressureSpots.length}');
+for (var spot in pressureSpots) {
+  print('x: ${spot.x}, y: ${spot.y}');
+}
+
+if (pressureSpots.isEmpty) {
+  print('PressureSpots kosong!');
+}
+
+
+
+
+// ✅ Assign hasil parsing ke list utama
+flowSpots = newFlowSpots;
+totalizerSpots = newTotalizerSpots;
+pressureSpots = newPressureSpots;
+
+setState(() {
+  filteredData = filtered;
+  flowSpots = newFlowSpots;
+  totalizerSpots = newTotalizerSpots;
+  pressureSpots = newPressureSpots;
+});
+
+
     } catch (_) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -390,7 +454,7 @@ class _GrafikPageState extends State<GrafikPage> {
                                   barWidth: 2,
                                   dotData: FlDotData(show: false),
                                 ),
-                                // Totalizer (dibagi 100k biar skala enak)
+                                // Totalizer
                                 LineChartBarData(
                                   spots: totalizerSpots,
                                   isCurved: true,
@@ -398,7 +462,16 @@ class _GrafikPageState extends State<GrafikPage> {
                                   barWidth: 2,
                                   dotData: FlDotData(show: false),
                                 ),
+                                // Pressure
+                                LineChartBarData(
+                                  spots: pressureSpots,
+                                  isCurved: true,
+                                  color: Colors.red,
+                                  barWidth: 2,
+                                  dotData: FlDotData(show: false),
+                                ),
                               ],
+
                             ),
                           ),
                         ),
@@ -407,11 +480,13 @@ class _GrafikPageState extends State<GrafikPage> {
                       const SizedBox(height: 6),
                       // Legend
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.center,
                         children: const [
                           LegendItem(color: Colors.blue, text: 'Flow'),
                           SizedBox(width: 16),
                           LegendItem(color: Colors.purple, text: 'Totalizer / 100k'),
+                          SizedBox(width: 16),
+                          LegendItem(color: Colors.red, text: 'Pressure'),
                         ],
                       ),
 
@@ -433,28 +508,38 @@ class _GrafikPageState extends State<GrafikPage> {
                             Row(
                               children: [
                                 Expanded(
-                                  child: TextField(
-                                    controller: startController,
-                                    decoration: const InputDecoration(
-                                      isDense: true,
-                                      border: OutlineInputBorder(),
-                                      contentPadding: EdgeInsets.symmetric(
-                                          horizontal: 8, vertical: 8),
+                                  child: GestureDetector(
+                                    onTap: () => pickDateTime(startController),
+                                    child: AbsorbPointer(
+                                      child: TextField(
+                                        controller: startController,
+                                        decoration: const InputDecoration(
+                                          isDense: true,
+                                          border: OutlineInputBorder(),
+                                          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),
+
                                 const SizedBox(width: 10),
                                 Expanded(
-                                  child: TextField(
-                                    controller: endController,
-                                    decoration: const InputDecoration(
-                                      isDense: true,
-                                      border: OutlineInputBorder(),
-                                      contentPadding: EdgeInsets.symmetric(
-                                          horizontal: 8, vertical: 8),
+                                    child: GestureDetector(
+                                      onTap: () => pickDateTime(startController),
+                                      child: AbsorbPointer(
+                                        child: TextField(
+                                          controller: startController,
+                                          decoration: const InputDecoration(
+                                            isDense: true,
+                                            border: OutlineInputBorder(),
+                                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                          ),
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                ),
+
                               ],
                             ),
                             const SizedBox(height: 8),

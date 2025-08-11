@@ -27,6 +27,7 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
+
 class _HomePageState extends State<HomePage> {
   int _navIndex = 1;
   late Timer _timer;
@@ -35,16 +36,93 @@ class _HomePageState extends State<HomePage> {
   List<ZoneData> _allZones = [];
   List<ZoneData> _filteredZones = [];
   
+  
 
   List<Map<String, dynamic>> _levelAirData = [];
   bool _isLoadingLevelAir = true;
 
   int _totalAduan = 0;
+  String _jumlahPelanggan = '0';
+  
+
 
 TextEditingController _searchController = TextEditingController();
 String _searchQuery = '';
 List _zonaList = []; // hasil dari API
 Map? _selectedZona;  // zona yang ditampilkan
+
+
+  int jumlahZona = 0;
+  bool isLoadingZona = true;
+  String lastUpdate = "";
+
+Future<void> _fetchJumlahZona() async {
+  try {
+    final response = await http.get(
+      Uri.parse('https://dev.tirtaayu.my.id/api/tekniks/zona'),
+      headers: {
+        'Authorization': 'Bearer 8|3acT1iWYizq86jljp8FGUmQwLHF6fGSqFQ1gXa3T94fd5111', // ganti $tokenAnda sesuai token login
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final jsonData = json.decode(response.body);
+
+      if (jsonData['status'] == "success" && jsonData['data'] is List) {
+        setState(() {
+          jumlahZona = jsonData['data'].length;
+        });
+      } else {
+        print("Format data tidak sesuai");
+      }
+    } else {
+      print('Gagal memuat data zona: ${response.statusCode}');
+    }
+  } catch (e) {
+    print('Error: $e');
+  }
+}
+
+
+
+Future<void> _fetchJumlahPelanggan() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+
+    final response = await http.get(
+      Uri.parse('https://dev.tirtaayu.my.id/api/tekniks/util'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final decoded = json.decode(response.body);
+      if (decoded['status'] == 'success') {
+        String totalString = decoded['data']['total_pelanggan_aktif'] ?? '0';
+
+        // Hilangkan titik, lalu ubah ke int
+        int totalInt = int.tryParse(totalString.replaceAll('.', '')) ?? 0;
+
+        // Format angka ke ribuan
+        String formatted = NumberFormat.decimalPattern('id_ID').format(totalInt);
+
+        setState(() {
+          _jumlahPelanggan = formatted; // Contoh: "60.516"
+        });
+      } else {
+        print('Gagal memuat jumlah pelanggan');
+      }
+    } else {
+      print('Status bukan 200: ${response.statusCode}');
+    }
+  } catch (e) {
+    print('Error fetchJumlahPelanggan: $e');
+  }
+}
 
 
 Future<void> _fetchLevelAirData() async {
@@ -193,6 +271,8 @@ double _calculateNormalizedValue(double current, double min, double max) {
     _fetchLevelAirData();
     _fetchTotalAduan();
     _fetchAllZones();
+    _fetchJumlahPelanggan();
+    _fetchJumlahZona();
   }
 
   @override
@@ -229,12 +309,13 @@ double _calculateNormalizedValue(double current, double min, double max) {
                     onTap: () {
                       Navigator.push(context, MaterialPageRoute(builder: (_) => const ZonaPage()));
                     },
-                    child: const _InfoCard(
-                      color: Colors.blue,
-                      icon: Icons.location_on,
-                      label: 'Zona',
-                      value: '20',
-                    ),
+                    child: _InfoCard(
+                    color: Colors.blue,
+                    icon: Icons.location_on,
+                    label: 'Zona',
+                    value: '$jumlahZona',
+                  ),
+
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -243,9 +324,10 @@ double _calculateNormalizedValue(double current, double min, double max) {
                     color: Colors.blue,
                     icon: Icons.people,
                     label: 'SR',
-                    value: '60.213',
+                    value: _jumlahPelanggan,
                   ),
                 ),
+
               ]),
               SizedBox(height: vSpacing),
               Row(children: [
