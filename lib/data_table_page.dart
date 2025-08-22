@@ -5,23 +5,16 @@ import 'package:printing/printing.dart';
 
 class DataTablePage extends StatelessWidget {
   final String zoneName;
-  const DataTablePage({super.key, required this.zoneName});
+  final List<Map<String, dynamic>> data; // ✅ data dari luar
+
+  const DataTablePage({
+    super.key,
+    required this.zoneName,
+    required this.data,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final List<Map<String, dynamic>> data = [
-      {"datetime": "2025-07-02 00:12", "flow": 3.93, "pressure": 0.0, "totalizer": 382347},
-      {"datetime": "2025-07-02 01:17", "flow": 3.89, "pressure": 0.0, "totalizer": 382351},
-      {"datetime": "2025-07-02 03:23", "flow": 3.92, "pressure": 0.0, "totalizer": 382355},
-      {"datetime": "2025-07-02 10:10", "flow": 3.75, "pressure": 0.0, "totalizer": 382360},
-      {"datetime": "2025-07-02 22:00", "flow": 3.70, "pressure": 0.0, "totalizer": 382370},
-      {"datetime": "2025-07-02 10:35", "flow": 3.77, "pressure": 0.0, "totalizer": 382362},
-      {"datetime": "2025-07-02 13:58", "flow": 3.75, "pressure": 0.0, "totalizer": 382368},
-      {"datetime": "2025-07-02 13:41", "flow": 3.62, "pressure": 0.0, "totalizer": 382370},
-      {"datetime": "2025-07-02 13:54", "flow": 3.60, "pressure": 0.0, "totalizer": 382373},
-      {"datetime": "2025-07-02 20:47", "flow": 3.58, "pressure": 0.0, "totalizer": 382376},
-    ];
-
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.teal.shade100,
@@ -51,7 +44,7 @@ class DataTablePage extends StatelessWidget {
                   icon: const Icon(Icons.menu, color: Colors.black),
                   onSelected: (value) {
                     if (value == 'print') {
-                      _printPdf(context, data); // ✅ Fungsi cetak dipanggil
+                      _printPdf(context, data); // ✅ Cetak PDF dari data
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text("Fitur $value belum diimplementasi")),
@@ -88,15 +81,15 @@ class DataTablePage extends StatelessWidget {
                         ),
                         Padding(
                           padding: EdgeInsets.all(8),
-                          child: Text("Flow", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
+                          child: Text("Level", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
                         ),
                         Padding(
                           padding: EdgeInsets.all(8),
-                          child: Text("Pressure", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
+                          child: Text("Satuan", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
                         ),
                         Padding(
                           padding: EdgeInsets.all(8),
-                          child: Text("Totalizer", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
+                          child: Text("Min / Max", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
                         ),
                       ],
                     ),
@@ -105,19 +98,22 @@ class DataTablePage extends StatelessWidget {
                         children: [
                           Padding(
                             padding: const EdgeInsets.all(8),
-                            child: Text(item['datetime'], textAlign: TextAlign.center),
+                            child: Text(item['tanggal']?.toString() ?? '-', textAlign: TextAlign.center),
                           ),
                           Padding(
                             padding: const EdgeInsets.all(8),
-                            child: Text(item['flow'].toString(), textAlign: TextAlign.center),
+                            child: Text(item['level']?['nilai']?.toString() ?? '-', textAlign: TextAlign.center),
                           ),
                           Padding(
                             padding: const EdgeInsets.all(8),
-                            child: Text(item['pressure'].toString(), textAlign: TextAlign.center),
+                            child: Text(item['level']?['satuan']?.toString() ?? '-', textAlign: TextAlign.center),
                           ),
                           Padding(
                             padding: const EdgeInsets.all(8),
-                            child: Text(item['totalizer'].toString(), textAlign: TextAlign.center),
+                            child: Text(
+                              "${item['level']?['min'] ?? '-'} / ${item['level']?['max'] ?? '-'}",
+                              textAlign: TextAlign.center,
+                            ),
                           ),
                         ],
                       ),
@@ -147,13 +143,13 @@ class DataTablePage extends StatelessWidget {
               ),
               pw.SizedBox(height: 12),
               pw.Table.fromTextArray(
-                headers: ['DateTime', 'Flow', 'Pressure', 'Totalizer'],
+                headers: ['DateTime', 'Level', 'Satuan', 'Min / Max'],
                 data: data.map((item) {
                   return [
-                    item['datetime'],
-                    item['flow'].toString(),
-                    item['pressure'].toString(),
-                    item['totalizer'].toString(),
+                    item['tanggal']?.toString() ?? '-',
+                    item['level']?['nilai']?.toString() ?? '-',
+                    item['level']?['satuan']?.toString() ?? '-',
+                    "${item['level']?['min'] ?? '-'} / ${item['level']?['max'] ?? '-'}",
                   ];
                 }).toList(),
                 border: pw.TableBorder.all(width: 0.5, color: PdfColors.black),

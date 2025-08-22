@@ -14,7 +14,7 @@ import 'pressure_logger_page.dart';
 import 'grafik_level_air_page.dart';
 import 'zona_page.dart';
 import 'kualitas_air_page.dart';
-import 'data_logger_page.dart';
+import 'package:forgot_pass/data_logger_page.dart';
 import 'aduan_terproses.dart';
 import 'message_page.dart';
 import 'profile_page.dart';
@@ -225,6 +225,7 @@ Future<void> _fetchAllZones() async {
       List<ZoneData> allZoneList = data.map((item) {
         final zona = Zona.fromJson(item);
         return ZoneData(
+          id: zona.deviceId.toString(),   // ← ambil dari API
           name: zona.nama,
           latitude: zona.lat,
           longitude: zona.long,
@@ -408,11 +409,16 @@ double _calculateNormalizedValue(double current, double min, double max) {
                     child: TextField(
                     controller: _searchController,
                     onChanged: (value) {
-                      setState(() {
-                        _searchQuery = value.toLowerCase();
-                        _filteredZones = _allZones.where((zone) => zone.name.toLowerCase().contains(_searchQuery)).toList();
-                      });
-                    },
+                    setState(() {
+                      _searchQuery = value.toLowerCase();
+                      _filteredZones = _allZones.where((zone) {
+                        final nameMatch = zone.name.toLowerCase().contains(_searchQuery);
+                        final idMatch = zone.id.toLowerCase().contains(_searchQuery);
+                        return nameMatch || idMatch;
+                      }).toList();
+                    });
+                  },
+
 
                     decoration: InputDecoration(
                       hintText: 'Search',
@@ -944,13 +950,12 @@ class _SingleZoneCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  zone.name,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: zoneColor,
-                  ),
-                ),
+                "${zone.name} - ${zone.id}",
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: Colors.teal,
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
                 const SizedBox(height: 8),
                 _FlowLoggerInfo(
                   label: 'Flow',
@@ -1169,6 +1174,7 @@ class Zona {
 }
 
 class ZoneData {
+  final String id;
   final String name;
   final double latitude;
   final double longitude;
@@ -1179,6 +1185,7 @@ class ZoneData {
   final bool isNormal;
 
   ZoneData({
+    required this.id,
     required this.name,
     required this.latitude,
     required this.longitude,

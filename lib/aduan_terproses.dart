@@ -22,38 +22,40 @@ class _AduanTerprosesPageState extends State<AduanTerprosesPage> {
   }
 
   Future<void> fetchAduanData() async {
-    const url = 'https://app.tirtaayu.com/api/dataaduan';
-    try {
-      final response = await http.get(Uri.parse(url));
-      final responseData = jsonDecode(response.body);
+  const url = 'https://app.tirtaayu.com/api/dataaduan';
+  try {
+    final response = await http.get(Uri.parse(url));
+    final responseData = jsonDecode(response.body);
 
-      if (responseData['status'] == 'success') {
-        final Map<String, dynamic> data = responseData['data'];
-        final List<Map<String, dynamic>> aduanList = [];
+    if (responseData['status'] == 'success') {
+      final Map<String, dynamic> data = responseData['data'];
+      final List<Map<String, dynamic>> aduanList = [];
 
-        int index = 1;
-        data.forEach((key, value) {
-          aduanList.add({
-            "no": index++,
-            "cabang": value['nama_unit'],
-            "jumlah": value['total'],
-          });
+      int index = 1;
+      data.forEach((key, value) {
+        aduanList.add({
+          "no": index++,
+          "cabang": value['nama_unit'],
+          "jumlah": value['total'],
+          "zone_id": key, // <-- ambil langsung dari key
         });
+      });
 
-        setState(() {
-          dataAduan = aduanList;
-          isLoading = false;
-        });
-      } else {
-        throw Exception('Failed to load data');
-      }
-    } catch (e) {
       setState(() {
+        dataAduan = aduanList;
         isLoading = false;
       });
-      debugPrint('Error fetching data: $e');
+    } else {
+      throw Exception('Failed to load data');
     }
+  } catch (e) {
+    setState(() {
+      isLoading = false;
+    });
+    debugPrint('Error fetching data: $e');
   }
+}
+
 
   Widget buildTable() {
     return ListView(
@@ -118,14 +120,15 @@ class _AduanTerprosesPageState extends State<AduanTerprosesPage> {
                                   ),
                                   onPressed: () {
                                     Navigator.pop(context);
-                                    if (item['cabang'].toString().toLowerCase().contains("slawi")) {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => const DetailCabangSlawiPage(),
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => DetailCabangSlawiPage(
+                                          zoneId: item['zone_id'].toString(),
+                                          zoneName: item['cabang'].toString(),
                                         ),
-                                      );
-                                    }
+                                      ),
+                                    );
                                   },
                                   child: const Text("Detail", style: TextStyle(color: Colors.white)),
                                 ),

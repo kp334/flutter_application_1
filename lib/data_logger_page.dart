@@ -53,6 +53,7 @@ class _DataLoggerScreenState extends State<DataLoggerScreen> {
 
         List<ZoneData> combined = loadedZona.map((zona) {
           return ZoneData(
+            id: zona.deviceId.toString(),
             name: zona.nama,
             latitude: zona.lat,
             longitude: zona.long,
@@ -82,14 +83,17 @@ class _DataLoggerScreenState extends State<DataLoggerScreen> {
   }
 
   void _onSearchChanged() {
-    final query = _searchController.text.toLowerCase();
-    setState(() {
-      filteredZones = zones
-          .where((zone) => zone.name.toLowerCase().contains(query))
-          .toList();
-      _currentPage = 0;
-    });
-  }
+  final query = _searchController.text.toLowerCase();
+  setState(() {
+    filteredZones = zones.where((zone) {
+      final nameMatch = zone.name.toLowerCase().contains(query);
+      final idMatch = zone.id.toLowerCase().contains(query);
+      return nameMatch || idMatch; 
+    }).toList();
+    _currentPage = 0;
+  });
+}
+
 
   @override
   void dispose() {
@@ -296,12 +300,12 @@ class ZoneCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  zone.name,
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: Colors.teal,
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
+                      "${zone.name} - ${zone.id}",   // tampilkan nama + id
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            color: Colors.teal,
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
                 Row(
                   children: [
                     Icon(
@@ -424,6 +428,7 @@ class Zona {
 }
 
 class ZoneData {
+  final String id; // <-- tambahkan ini
   final String name;
   final double latitude;
   final double longitude;
@@ -434,6 +439,7 @@ class ZoneData {
   final bool isNormal;
 
   ZoneData({
+    required this.id, // <-- tambahkan ini
     required this.name,
     required this.latitude,
     required this.longitude,
